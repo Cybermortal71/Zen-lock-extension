@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenLock - 时间到</title>
+  <style>
+    :root {
+      --primary: #4a90d9;
+      --primary-dark: #3a7bc8;
+      --primary-light: #e8f0fe;
+      --bg: #f5f8fc;
+      --card-bg: #ffffff;
+      --text: #2c3e50;
+      --text-secondary: #7f8c9b;
+      --border: #dce6f0;
+      --radius: 12px;
+      --shadow: 0 4px 20px rgba(74, 144, 217, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 36px 28px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .domain-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--primary);
+      background: var(--primary-light);
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+      word-break: break-all;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #f0f4f8;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">⏰</div>
+    <div class="title">规划时间已到</div>
+    <div class="domain-name" id="domainDisplay">…</div>
+    <div class="hint" id="hintText">你为这个网站设定的专注时间已经用完了。<br>是继续完成工作，还是就此停手？</div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="closeBtn">关闭此页面</button>
+      <button class="btn btn-primary" id="extendBtn">延长 5 分钟</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="timeup.js"></script>
+</body>
+</html>

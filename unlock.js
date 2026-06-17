@@ -83,16 +83,25 @@ confirmBtn.addEventListener('click', async () => {
     domain = targetUrl;
   }
 
-  // 1. 写入通行证
+  // 提取根域名（通行证/闹钟均以此为键）
+  function getRootDomain(hostname) {
+    if (!hostname) return hostname;
+    const parts = hostname.split('.');
+    if (parts.length <= 2) return hostname;
+    return parts.slice(-2).join('.');
+  }
+  const rootDomain = getRootDomain(domain);
+
+  // 1. 写入通行证（根域名键）
   const { passes } = await chrome.storage.local.get('passes');
   const allPasses = passes || {};
-  allPasses[domain] = passExpiry;
+  allPasses[rootDomain] = passExpiry;
   await chrome.storage.local.set({ passes: allPasses });
 
   // 2. 写入 currentSession（为后续审核/盆栽做准备）
   await chrome.storage.local.set({
     currentSession: {
-      domain,
+      domain: rootDomain,
       targetUrl,
       purpose,
       plannedMinutes,
@@ -101,9 +110,28 @@ confirmBtn.addEventListener('click', async () => {
     }
   });
 
-  console.log('🔓 已解锁:', domain, '有效期', plannedMinutes, '分钟');
+  // 3. 创建通行证到期闹钟（根域名）
+  const alarmBase = rootDomain.replace(/\./g, '_');
 
-  // 3. 延迟 300ms 确保 storage 已落盘，再跳转
+  // 先清除同名旧闹钟
+  await chrome.alarms.clear(alarmBase + '_warning');
+  await chrome.alarms.clear(alarmBase + '_expire');
+
+  // expire 闹钟：规划用时结束时触发（至少 0.1 分钟）
+  const expireDelay = Math.max(0.1, plannedMinutes);
+  await chrome.alarms.create(alarmBase + '_expire', { delayInMinutes: expireDelay });
+  console.log('⏰ 到期闹钟已创建:', alarmBase + '_expire', '延迟', expireDelay, '分钟');
+
+  // warning 闹钟：规划结束前 2 分钟触发（仅当 > 2 分钟时）
+  if (plannedMinutes > 2) {
+    const warningDelay = Math.max(0.1, plannedMinutes - 2);
+    await chrome.alarms.create(alarmBase + '_warning', { delayInMinutes: warningDelay });
+    console.log('⏰ 提醒闹钟已创建:', alarmBase + '_warning', '延迟', warningDelay, '分钟');
+  }
+
+  console.log('🔓 已解锁:', domain, '(根:', rootDomain, ') 有效期', plannedMinutes, '分钟');
+
+  // 4. 延迟 300ms 确保 storage 已落盘，再跳转
   setTimeout(() => {
     location.href = targetUrl;
   }, 300);

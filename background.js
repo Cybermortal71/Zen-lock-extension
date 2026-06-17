@@ -38,6 +38,18 @@ function normalizeDomain(domain) {
   return domain.startsWith('www.') ? domain.slice(4) : domain;
 }
 
+/**
+ * 提取根域名（最后两段）
+ * 例如 www.bilibili.com → bilibili.com
+ * 例如 message.bilibili.com → bilibili.com
+ */
+function getRootDomain(hostname) {
+  if (!hostname) return hostname;
+  const parts = hostname.split('.');
+  if (parts.length <= 2) return hostname;
+  return parts.slice(-2).join('.');
+}
+
 /** 获取当前窗口的活跃标签页 */
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -237,22 +249,27 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
   if (!dom) return;
 
-  // --- 域名标准化（去 www.）后比对黑名单 ---
+  // --- 域名标准化 + 子域名匹配 ---
   const normalizedDom = normalizeDomain(dom);
 
   const { blacklist } = await chrome.storage.sync.get(['blacklist']);
   const list = blacklist || [];
 
-  // 将黑名单中的域名也标准化后做成 Set 用于匹配
-  const normalizedSet = new Set(list.map(normalizeDomain));
+  // 逐条比对：精确匹配 或 子域名匹配（防止 notbilibili.com 误伤）
+  const isBlocked = list.some(entry => {
+    const normalizedEntry = normalizeDomain(entry);
+    if (!normalizedEntry) return false;
+    if (normalizedDom === normalizedEntry) return true;
+    if (normalizedDom.endsWith('.' + normalizedEntry)) return true;
+    return false;
+  });
 
-  const isBlocked = normalizedSet.has(normalizedDom);
   console.log('[拦截检查]', dom, '(标准化:', normalizedDom, ') 是否在黑名单:', isBlocked, '| 黑名单:', list);
 
   if (!isBlocked) return; // 不在黑名单，放行
 
-  // --- 检查通行证 ---
-  if (await hasValidPass(dom)) return; // 通行证有效，放行
+  // --- 检查通行证（使用根域名） ---
+  if (await hasValidPass(getRootDomain(dom))) return; // 通行证有效，放行
 
   // --- 拦截！重定向到解锁页 ---
   const unlockUrl = chrome.runtime.getURL('unlock.html') +
@@ -304,13 +321,24 @@ chrome.idle.onStateChanged.addListener(async (state) => {
 // ============================================================
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === 'keepAlive') {
+  const name = alarm.name;
+
+  if (name === 'keepAlive') {
     console.log('💓 keepAlive @', new Date().toISOString());
-    // 主动读写 storage，让浏览器认为 SW 在做有用工作，减少被回收概率
     await chrome.storage.local.get('timeLog');
     await verifyTracking();
-  } else if (alarm.name === 'dailyCleanup') {
+
+  } else if (name === 'dailyCleanup') {
     await dailyCleanup();
+
+  } else if (name.endsWith('_warning')) {
+    // 解析域名：bilibili_com_warning → bilibili.com
+    const domain = name.slice(0, -8).replace(/_/g, '.');
+    await handleTimeWarning(domain);
+
+  } else if (name.endsWith('_expire')) {
+    const domain = name.slice(0, -7).replace(/_/g, '.');
+    await handleTimeExpire(domain);
   }
 });
 
@@ -334,6 +362,82 @@ async function verifyTracking() {
     }
   } catch {
     // 忽略
+  }
+}
+
+// ============================================================
+//  通行证告警处理
+// ============================================================
+
+/**
+ * 查找所有匹配域名的标签页（标准化比对）
+ */
+async function findTabsByDomain(domain) {
+  const rootDomain = getRootDomain(domain);
+  const tabs = await chrome.tabs.query({});
+  return tabs.filter(tab => {
+    try {
+      return getRootDomain(new URL(tab.url).hostname) === rootDomain;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * 时间提醒：距离规划结束还有 2 分钟
+ */
+async function handleTimeWarning(domain) {
+  console.log('⏰ [提醒]', domain, '— 距离规划结束还有 2 分钟');
+
+  const tabs = await findTabsByDomain(domain);
+  for (const tab of tabs) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        action: 'timeWarning',
+        domain,
+        remaining: 120
+      });
+    } catch {
+      // 该标签页未加载 content script，忽略
+    }
+  }
+}
+
+/**
+ * 时间到：清除通行证，重定向到 timeup 页面
+ */
+async function handleTimeExpire(domain) {
+  console.log('⏰ [到期]', domain, '— 通行证已失效');
+
+  // 清除该根域名的通行证
+  const rootDomain = getRootDomain(domain);
+  const { passes } = await chrome.storage.local.get('passes');
+  if (passes && passes[rootDomain]) {
+    delete passes[rootDomain];
+    await chrome.storage.local.set({ passes });
+  }
+
+  // 查找并重定向所有匹配标签页
+  const tabs = await findTabsByDomain(domain);
+  for (const tab of tabs) {
+    // 跳过已在 timeup 页面的标签
+    if (tab.url && tab.url.includes('timeup.html')) continue;
+
+    // 发送 timeUp 消息
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'timeUp', domain });
+    } catch {
+      // content script 可能未加载
+    }
+
+    // 重定向到 timeup 页面
+    const timeupUrl = chrome.runtime.getURL('timeup.html') +
+      '?domain=' + encodeURIComponent(domain) +
+      '&target=' + encodeURIComponent(tab.url);
+
+    await chrome.tabs.update(tab.id, { url: timeupUrl });
+    console.log('🔒 [到期] 已重定向标签页:', tab.id, domain);
   }
 }
 
