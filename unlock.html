@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenLock - 解锁网站</title>
+  <style>
+    :root {
+      --primary: #4a90d9;
+      --primary-light: #e8f0fe;
+      --primary-dark: #3a7bc8;
+      --bg: #f5f8fc;
+      --card-bg: #ffffff;
+      --text: #2c3e50;
+      --text-secondary: #7f8c9b;
+      --border: #dce6f0;
+      --radius: 12px;
+      --shadow: 0 4px 20px rgba(74, 144, 217, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px 28px;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    /* --- 头部 --- */
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .header .logo {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+    }
+
+    .header .subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* --- 目标域名 --- */
+    .target-box {
+      background: var(--primary-light);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .target-box .lock-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .target-box .target-domain {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-all;
+      flex: 1;
+    }
+
+    /* --- 表单组 --- */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+      background: #fff;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .form-group input::placeholder {
+      color: #bcc8d6;
+    }
+
+    /* --- 自定义分钟 --- */
+    .custom-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.25s, opacity 0.25s, margin 0.25s;
+    }
+
+    .custom-row.show {
+      max-height: 60px;
+      opacity: 1;
+    }
+
+    .custom-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .custom-row input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .custom-row span {
+      font-size: 13px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    /* --- 按钮组 --- */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #f0f4f8;
+    }
+
+    /* --- Toast --- */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">ZenLock</div>
+      <div class="subtitle">专注访问 · 先想清楚目的</div>
+    </div>
+
+    <!-- 目标网址 -->
+    <div class="target-box">
+      <span class="lock-icon">🔒</span>
+      <span class="target-domain" id="targetDomain">加载中…</span>
+    </div>
+
+    <!-- 访问目的 -->
+    <div class="form-group">
+      <label for="purpose">访问目的</label>
+      <input
+        type="text"
+        id="purpose"
+        placeholder="例如：查文档、看教程、回复消息…"
+        autocomplete="off"
+        maxlength="200"
+      >
+    </div>
+
+    <!-- 规划用时 -->
+    <div class="form-group">
+      <label for="duration">规划用时</label>
+      <select id="duration">
+        <option value="5">5 分钟</option>
+        <option value="15" selected>15 分钟</option>
+        <option value="25">25 分钟</option>
+        <option value="30">30 分钟</option>
+        <option value="custom">自定义…</option>
+      </select>
+
+      <div class="custom-row" id="customRow">
+        <input
+          type="number"
+          id="customMinutes"
+          placeholder="分钟数"
+          min="1"
+          max="120"
+          value="10"
+        >
+        <span>分钟</span>
+      </div>
+    </div>
+
+    <!-- 按钮 -->
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="backBtn">返回</button>
+      <button class="btn btn-primary" id="confirmBtn">确认解锁</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="unlock.js"></script>
+</body>
+</html>

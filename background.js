@@ -29,10 +29,27 @@ function hostname(url) {
   }
 }
 
+/**
+ * 域名标准化：去掉开头的 www. 前缀
+ * 例如 www.bilibili.com → bilibili.com
+ */
+function normalizeDomain(domain) {
+  if (!domain) return domain;
+  return domain.startsWith('www.') ? domain.slice(4) : domain;
+}
+
 /** 获取当前窗口的活跃标签页 */
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab || null;
+}
+
+/** 解锁页面完整 URL */
+const UNLOCK_PAGE = chrome.runtime.getURL('unlock.html');
+
+/** 判断 URL 是否为普通网页（可追踪/可拦截） */
+function isWebPage(url) {
+  return url && (url.startsWith('http://') || url.startsWith('https://'));
 }
 
 // ============================================================
@@ -129,13 +146,16 @@ chrome.tabs.onActivated.addListener(async () => {
   }
 });
 
-/** 标签页 URL / 加载状态变化 */
+/** 标签页 URL / 加载状态变化（仅追踪） */
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (isIdle) return;
   if (!tab.active) return;                         // 只关心活跃标签
   if (!changeInfo.url && changeInfo.status !== 'complete') return;
 
-  const dom = hostname(tab.url || changeInfo.url);
+  const url = tab.url || changeInfo.url;
+  if (!isWebPage(url)) return;                     // 跳过扩展页/内部页
+
+  const dom = hostname(url);
   if (dom && dom !== currentDomain) {
     await switchDomain(dom);
   }
@@ -156,6 +176,90 @@ chrome.tabs.onRemoved.addListener(async () => {
       await switchDomain(null);
     }
   }, 150);
+});
+
+// ============================================================
+//  网站锁：黑名单拦截（独立于追踪监听器）
+// ============================================================
+
+/**
+ * 检查通行证是否有效；顺带清理过期条目
+ */
+async function hasValidPass(domain) {
+  const { passes } = await chrome.storage.local.get('passes');
+  const all = passes || {};
+  const expiry = all[domain];
+  if (!expiry) return false;
+
+  if (Date.now() < expiry) {
+    console.log('[Zenlock] 通行证有效，剩余', Math.floor((expiry - Date.now()) / 60000), '分钟:', domain);
+    return true;
+  }
+
+  // 已过期 → 清理
+  delete all[domain];
+  await chrome.storage.local.set({ passes: all });
+  console.log('[Zenlock] 通行证已过期，已清理:', domain);
+  return false;
+}
+
+/** 拦截检查：每个标签页加载完成时触发 */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // 只拦截页面加载完成
+  if (changeInfo.status !== 'complete') return;
+
+  const url = tab.url;
+  if (!url) return;
+
+  // --- 排除非网页 URL ---
+  // 扩展自身的 unlock 页面 → 放行（重定向循环防护）
+  if (url.startsWith(UNLOCK_PAGE)) return;
+
+  // 浏览器内部页面 / 扩展管理页 / 新标签页等 → 放行
+  if (
+    url.startsWith('chrome://') ||
+    url.startsWith('edge://') ||
+    url.startsWith('chrome-extension://') ||
+    url.startsWith('about:') ||
+    url === 'chrome://newtab/' ||
+    url === 'edge://newtab/'
+  ) return;
+
+  // 只拦截 http / https 页面
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return;
+
+  // --- 提取域名 ---
+  let dom;
+  try {
+    dom = new URL(url).hostname;
+  } catch {
+    return; // URL 解析失败，放行
+  }
+  if (!dom) return;
+
+  // --- 域名标准化（去 www.）后比对黑名单 ---
+  const normalizedDom = normalizeDomain(dom);
+
+  const { blacklist } = await chrome.storage.sync.get(['blacklist']);
+  const list = blacklist || [];
+
+  // 将黑名单中的域名也标准化后做成 Set 用于匹配
+  const normalizedSet = new Set(list.map(normalizeDomain));
+
+  const isBlocked = normalizedSet.has(normalizedDom);
+  console.log('[拦截检查]', dom, '(标准化:', normalizedDom, ') 是否在黑名单:', isBlocked, '| 黑名单:', list);
+
+  if (!isBlocked) return; // 不在黑名单，放行
+
+  // --- 检查通行证 ---
+  if (await hasValidPass(dom)) return; // 通行证有效，放行
+
+  // --- 拦截！重定向到解锁页 ---
+  const unlockUrl = chrome.runtime.getURL('unlock.html') +
+    '?target=' + encodeURIComponent(url);
+
+  console.log('🔒 [拦截]', dom, '→ 重定向到解锁页:', unlockUrl);
+  await chrome.tabs.update(tabId, { url: unlockUrl });
 });
 
 // ============================================================
@@ -276,7 +380,23 @@ async function dailyCleanup() {
     }
   }
 
-  const deleted = sessionsChanged || timeLogChanged;
+  // ---- 清理过期通行证 ----
+  let passesChanged = false;
+  const { passes } = await chrome.storage.local.get('passes');
+  if (passes) {
+    const now = Date.now();
+    for (const domain of Object.keys(passes)) {
+      if (passes[domain] < now) {
+        delete passes[domain];
+        passesChanged = true;
+      }
+    }
+    if (passesChanged) {
+      await chrome.storage.local.set({ passes });
+    }
+  }
+
+  const deleted = sessionsChanged || timeLogChanged || passesChanged;
   console.log(deleted ? `  已删除 ${cutoffKey} 之前的数据` : '  无需清理');
 }
 
