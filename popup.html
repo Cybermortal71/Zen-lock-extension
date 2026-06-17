@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenLock</title>
+  <style>
+    :root {
+      --primary: #4a90d9;
+      --primary-light: #e8f0fe;
+      --bg: #f5f8fc;
+      --card-bg: #ffffff;
+      --text: #2c3e50;
+      --text-secondary: #7f8c9b;
+      --border: #dce6f0;
+      --radius: 10px;
+      --shadow: 0 2px 12px rgba(74, 144, 217, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      width: 280px;
+      padding: 20px;
+    }
+
+    /* --- 头部 --- */
+    .header {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+
+    .header .logo {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+    }
+
+    .header .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #27ae60;
+      margin-top: 4px;
+    }
+
+    .header .status .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #27ae60;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* --- 统计卡片 --- */
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stat-card .label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .stat-card .value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    /* --- 导航链接 --- */
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      text-decoration: none;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .nav a:hover {
+      background: var(--primary-light);
+      transform: translateY(-1px);
+    }
+
+    .nav a .icon {
+      font-size: 18px;
+    }
+
+    .nav a .arrow {
+      margin-left: auto;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">ZenLock</div>
+    <div class="status">
+      <span class="dot"></span>
+      已运行
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <span class="label">黑名单网站</span>
+    <span class="value" id="blacklistCount">0</span>
+  </div>
+
+  <nav class="nav">
+    <a href="#" id="gardenLink">
+      <span class="icon">🌿</span>
+      花园
+      <span class="arrow">›</span>
+    </a>
+    <a href="#" id="statsLink">
+      <span class="icon">📊</span>
+      统计
+      <span class="arrow">›</span>
+    </a>
+    <a href="#" id="optionsLink">
+      <span class="icon">⚙️</span>
+      设置
+      <span class="arrow">›</span>
+    </a>
+  </nav>
+
+  <script src="popup.js"></script>
+</body>
+</html>

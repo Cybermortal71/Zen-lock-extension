@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenLock - 设置</title>
+  <style>
+    :root {
+      --primary: #4a90d9;
+      --primary-light: #e8f0fe;
+      --danger: #e05555;
+      --danger-light: #fde8e8;
+      --bg: #f5f8fc;
+      --card-bg: #ffffff;
+      --text: #2c3e50;
+      --text-secondary: #7f8c9b;
+      --border: #dce6f0;
+      --radius: 10px;
+      --shadow: 0 2px 12px rgba(74, 144, 217, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      max-width: 560px;
+      width: 100%;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    .card h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    /* --- 输入行 --- */
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-row input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .input-row input::placeholder {
+      color: #bcc8d6;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #3a7bc8;
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1.5px solid var(--danger-light);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger-light);
+    }
+
+    /* --- 黑名单列表 --- */
+    .blacklist {
+      list-style: none;
+    }
+
+    .blacklist li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      background: var(--primary-light);
+      font-size: 14px;
+      transition: background 0.15s;
+    }
+
+    .blacklist li .domain {
+      font-weight: 500;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .blacklist li .btn-delete {
+      background: none;
+      border: none;
+      color: var(--danger);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .blacklist li .btn-delete:hover {
+      background: var(--danger-light);
+    }
+
+    .empty-hint {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 13px;
+      padding: 20px 0;
+    }
+
+    /* --- Toast --- */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ZenLock</h1>
+      <p>管理你的专注黑名单</p>
+    </header>
+
+    <!-- 添加域名 -->
+    <div class="card">
+      <h2>添加黑名单网站</h2>
+      <div class="input-row">
+        <input
+          type="text"
+          id="domainInput"
+          placeholder="例如：youtube.com"
+          autocomplete="off"
+        >
+        <button class="btn btn-primary" id="addBtn">添加</button>
+      </div>
+    </div>
+
+    <!-- 黑名单列表 -->
+    <div class="card">
+      <h2>已屏蔽网站 (<span id="count">0</span>)</h2>
+      <ul class="blacklist" id="blacklistUl"></ul>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

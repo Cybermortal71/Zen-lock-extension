@@ -1,0 +1,33 @@
+{
+  "name": "ZenLock",
+  "version": "1.0",
+  "description": "A mindful browsing companion that helps you stay focused.",
+  "manifest_version": 3,
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "idle",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ZenLock"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
