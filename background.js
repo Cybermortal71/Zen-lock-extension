@@ -580,8 +580,18 @@ async function harvestFruit() {
 /** 结算黑名单访问 */
 async function settleGrowth(domain) {
   const root = getRootDomain(domain);
-  const outcome = sessionOutcome[root];
-  if (!outcome) return;
+
+  // 先从内存读取，如果被 SW 重启清空则从 storage.session 恢复
+  let outcome = sessionOutcome[root];
+  if (!outcome) {
+    const { _sessionOutcome } = await chrome.storage.session.get('_sessionOutcome');
+    const saved = _sessionOutcome || {};
+    outcome = saved[root];
+  }
+  if (!outcome) {
+    console.log('🌱 结算跳过:', root, '（无对应会话记录，可能 SW 曾被回收）');
+    return;
+  }
 
   let points = 0, reason = '';
   if (outcome.lowQuality) {
@@ -594,7 +604,13 @@ async function settleGrowth(domain) {
 
   console.log('🌱 结算:', reason, '→', points, '分');
   const actual = await applyGrowth(points, reason);
+
+  // 清理内存和持久化的记录
   delete sessionOutcome[root];
+  const { _sessionOutcome } = await chrome.storage.session.get('_sessionOutcome');
+  const saved = _sessionOutcome || {};
+  delete saved[root];
+  await chrome.storage.session.set({ _sessionOutcome: saved });
 
   if (actual > 0 && actual === points) {
     await checkAchievements(true);
@@ -707,17 +723,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message.action === 'sessionStart') {
       const root = getRootDomain(message.domain);
-      sessionOutcome[root] = { extended: false, lowQuality: message.lowQuality || false };
+      const entry = { extended: false, lowQuality: message.lowQuality || false };
+      sessionOutcome[root] = entry;
+      // 持久化到 storage.session，防止 SW 重启丢失
+      const { _sessionOutcome } = await chrome.storage.session.get('_sessionOutcome');
+      const saved = _sessionOutcome || {};
+      saved[root] = entry;
+      await chrome.storage.session.set({ _sessionOutcome: saved });
       sendResponse({ ok: true });
     }
     else if (message.action === 'sessionExtend') {
       const root = getRootDomain(message.domain);
       if (sessionOutcome[root]) { sessionOutcome[root].extended = true; }
+      // 同步到持久化
+      const { _sessionOutcome } = await chrome.storage.session.get('_sessionOutcome');
+      const saved = _sessionOutcome || {};
+      if (saved[root]) { saved[root].extended = true; await chrome.storage.session.set({ _sessionOutcome: saved }); }
       sendResponse({ ok: true });
     }
     else if (message.action === 'sessionClose') {
       const root = getRootDomain(message.domain);
       if (sessionOutcome[root]) { delete sessionOutcome[root]; }
+      const { _sessionOutcome } = await chrome.storage.session.get('_sessionOutcome');
+      const saved = _sessionOutcome || {};
+      delete saved[root];
+      await chrome.storage.session.set({ _sessionOutcome: saved });
       // 温柔守护者计数
       const { _gentleCloseCount } = await chrome.storage.local.get('_gentleCloseCount');
       const gCount = (_gentleCloseCount || 0) + 1;

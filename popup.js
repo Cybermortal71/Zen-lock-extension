@@ -105,5 +105,26 @@ document.getElementById('statsLink').addEventListener('click', (e) => {
   chrome.tabs.create({ url: chrome.runtime.getURL('stats.html') });
 });
 
+// ============================================================
+//  制作者的话（修改下方变量中的文字即可更新内容）
+// ============================================================
+const AUTHOR_NOTE = `你好，我是 Zenlock 的创作者。
+
+关于这个工具，我有一些故事想和你分享……（此处等待作者填入）
+
+希望 Zenlock 能帮你更好地管理时间，在数字世界里保持专注与平静。
+
+<span class="signature">—— Zenlock 的创造者</span>`;
+
+const authorLink = document.getElementById('authorLink');
+const authorNote = document.getElementById('authorNote');
+authorNote.innerHTML = AUTHOR_NOTE;
+
+authorLink.addEventListener('click', () => {
+  const isOpen = authorNote.style.display === 'block';
+  authorNote.style.display = isOpen ? 'none' : 'block';
+  authorLink.textContent = isOpen ? '💬 制作者的话' : '▲ 收起';
+});
+
 // --- 启动 ---
 loadAll();
