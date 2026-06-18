@@ -26,7 +26,7 @@
     const totalTimeEl = document.getElementById('totalTime');
     const domainCountEl = document.getElementById('domainCount');
     const sessionCountEl = document.getElementById('sessionCount');
-    const blacklistHitsEl = document.getElementById('blacklistHits');
+    const unlockCountEl = document.getElementById('unlockCount');
     const resetZoomBtn = document.getElementById('resetZoomBtn');
 
     // 本地时间日期键（与 background.js 的 dateKey() 保持一致）
@@ -50,6 +50,19 @@
     function normalizeDomain(domain) {
       if (!domain) return domain;
       return domain.startsWith('www.') ? domain.slice(4) : domain;
+    }
+
+    /** 提取根域名（最后两段），与 background.js getRootDomain 一致 */
+    function getRootDomain(hostname) {
+      if (!hostname) return hostname;
+      const DOUBLE_SUFFIX = ['edu.cn','gov.cn','com.cn','org.cn','net.cn','ac.cn','mil.cn'];
+      const parts = hostname.split('.');
+      if (parts.length <= 2) return hostname;
+      const last2 = parts.slice(-2).join('.');
+      if (DOUBLE_SUFFIX.includes(last2) && parts.length >= 3) {
+        return parts.slice(-3).join('.');
+      }
+      return last2;
     }
 
     function isBlacklisted(domain, blacklist) {
@@ -465,6 +478,20 @@
         return true;
       });
 
+      // --- 按根域名合并显示 ---
+      const mergeStats = {}; // { rootDomain: { count, before: [子域名...] } }
+      daySessions.forEach(s => {
+        const root = getRootDomain(s.domain);
+        s._origDomain = s.domain;  // 保留原始域名
+        s.domain = root;            // 替换为根域名
+        if (!mergeStats[root]) mergeStats[root] = { count: 0, before: new Set() };
+        mergeStats[root].count++;
+        mergeStats[root].before.add(s._origDomain);
+      });
+      console.log('[Zenlock Stats] 根域名合并结果:', Object.entries(mergeStats).map(([k,v]) =>
+        `${k}(${[...v.before].join(',')}) ${v.count}条`
+      ));
+
       console.log('[Zenlock Stats] 当天 session 数量:', daySessions.length, '(过滤后)');
       if (daySessions.length > 0) {
         console.log('[Zenlock Stats] 前 3 条 sessions:', JSON.stringify(daySessions.slice(0, 3)));
@@ -481,7 +508,7 @@
         totalTimeEl.textContent = '--';
         domainCountEl.textContent = '--';
         sessionCountEl.textContent = '--';
-        blacklistHitsEl.textContent = '--';
+        unlockCountEl.textContent = '--';
         daySessionsCache = [];
         domainOrderCache = [];
         return;
@@ -507,23 +534,15 @@
 
       console.log('[Zenlock Stats] 汇总 totalSec:', totalSec, '→', formatDuration(totalSec), '| 域名:', domainSet.size, '| 跳过:', skipped);
 
-      // --- 黑名单命中统计 ---
-      const { blacklist } = await chrome.storage.sync.get(['blacklist']);
-      const blist = blacklist || [];
-      let blacklistHits = 0;
-      try {
-        daySessions.forEach(s => {
-          if (isBlacklisted(s.domain, blist)) blacklistHits++;
-        });
-      } catch (e) {
-        console.warn('[Zenlock Stats] 黑名单统计出错（已跳过）:', e);
-      }
-      console.log('[Zenlock Stats] 黑名单命中次数:', blacklistHits, '| 黑名单:', blist);
+      // --- 累计解锁次数（每次确认解锁 +1） ---
+      const { unlockCount } = await chrome.storage.local.get('unlockCount');
+      const ulk = unlockCount || 0;
+      console.log('[Zenlock Stats] 累计解锁次数:', ulk);
 
       totalTimeEl.textContent = formatDuration(totalSec);
       domainCountEl.textContent = domainSet.size;
       sessionCountEl.textContent = daySessions.length - skipped;
-      blacklistHitsEl.textContent = blacklistHits;
+      unlockCountEl.textContent = ulk;
 
       // --- 日期切换时重置缩放 ---
       zoomRange = null;

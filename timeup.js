@@ -24,9 +24,14 @@ const HINT_DEFAULT = '你为这个网站设定的专注时间已经用完了。<
  */
 function getRootDomain(hostname) {
   if (!hostname) return hostname;
+  const DOUBLE_SUFFIX = ['edu.cn','gov.cn','com.cn','org.cn','net.cn','ac.cn','mil.cn'];
   const parts = hostname.split('.');
   if (parts.length <= 2) return hostname;
-  return parts.slice(-2).join('.');
+  const last2 = parts.slice(-2).join('.');
+  if (DOUBLE_SUFFIX.includes(last2) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return last2;
 }
 const rootDomain = getRootDomain(domain);
 

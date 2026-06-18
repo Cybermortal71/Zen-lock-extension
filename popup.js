@@ -11,6 +11,19 @@ function todayKey() {
   return `${y}-${m}-${day}`;
 }
 
+/** 提取根域名（与 background.js getRootDomain 一致） */
+function getRootDomain(hostname) {
+  if (!hostname) return hostname;
+  const DOUBLE_SUFFIX = ['edu.cn','gov.cn','com.cn','org.cn','net.cn','ac.cn','mil.cn'];
+  const parts = hostname.split('.');
+  if (parts.length <= 2) return hostname;
+  const last2 = parts.slice(-2).join('.');
+  if (DOUBLE_SUFFIX.includes(last2) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return last2;
+}
+
 /** 秒数 → 可读时长 */
 function formatDuration(sec) {
   if (sec < 60) return `${sec}秒`;
@@ -24,20 +37,25 @@ function formatDuration(sec) {
 function renderTop5(dayLogs, hasTimeLog) {
   const list = document.getElementById('topList');
 
-  // timeLog 完全为空 → SW 可能尚未启动或刚安装
   if (!hasTimeLog) {
     list.innerHTML = '<li class="empty-hint">暂无数据（后台可能尚未启动）</li>';
     return;
   }
 
-  // timeLog 存在但今天无记录
   if (!dayLogs || Object.keys(dayLogs).length === 0) {
     list.innerHTML = '<li class="empty-hint">今天还没有浏览记录 🌱</li>';
     return;
   }
 
+  // 按根域名合并秒数
+  const merged = {};
+  Object.entries(dayLogs).forEach(([domain, sec]) => {
+    const root = getRootDomain(domain);
+    merged[root] = (merged[root] || 0) + sec;
+  });
+
   // 按秒数降序排列，取前 5
-  const sorted = Object.entries(dayLogs)
+  const sorted = Object.entries(merged)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 

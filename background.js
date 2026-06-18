@@ -49,9 +49,15 @@ function normalizeDomain(domain) {
  */
 function getRootDomain(hostname) {
   if (!hostname) return hostname;
+  // 国内双后缀列表：取最后三段才是根域名
+  const DOUBLE_SUFFIX = ['edu.cn','gov.cn','com.cn','org.cn','net.cn','ac.cn','mil.cn'];
   const parts = hostname.split('.');
   if (parts.length <= 2) return hostname;
-  return parts.slice(-2).join('.');
+  const last2 = parts.slice(-2).join('.');
+  if (DOUBLE_SUFFIX.includes(last2) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return last2;
 }
 
 /** 获取当前窗口的活跃标签页 */
