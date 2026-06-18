@@ -7,6 +7,8 @@ const addBtn = document.getElementById('addBtn');
 const blacklistUl = document.getElementById('blacklistUl');
 const countSpan = document.getElementById('count');
 const toast = document.getElementById('toast');
+const didaTokenInput = document.getElementById('didaTokenInput');
+const saveDidaBtn = document.getElementById('saveDidaBtn');
 const deepseekKeyInput = document.getElementById('deepseekKeyInput');
 const saveKeyBtn = document.getElementById('saveKeyBtn');
 
@@ -116,6 +118,18 @@ blacklistUl.addEventListener('click', (e) => {
   removeDomain(index);
 });
 
+// --- 滴答清单 Token ---
+async function loadDidaToken() {
+  const { didaToken } = await chrome.storage.sync.get('didaToken');
+  if (didaToken) didaTokenInput.value = didaToken;
+}
+
+saveDidaBtn.addEventListener('click', async () => {
+  const token = didaTokenInput.value.trim();
+  await chrome.storage.sync.set({ didaToken: token });
+  showToast(token ? 'Token 已保存' : 'Token 已清空');
+});
+
 // --- DeepSeek API Key ---
 async function loadKey() {
   const { deepseekKey } = await chrome.storage.sync.get('deepseekKey');
@@ -136,4 +150,5 @@ document.getElementById('statsLink').addEventListener('click', (e) => {
 
 // --- 启动 ---
 loadBlacklist();
+loadDidaToken();
 loadKey();

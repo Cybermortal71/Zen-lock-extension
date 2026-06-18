@@ -228,6 +228,108 @@ backBtn.addEventListener('click', async () => {
   }
 });
 
+// --- 今日待办（滴答清单） ---
+const todoContent = document.getElementById('todoContent');
+
+async function loadTodoList() {
+  const { didaToken } = await chrome.storage.sync.get('didaToken');
+  if (!didaToken) {
+    todoContent.innerHTML = '<span style="color:var(--text-secondary);">未连接滴答清单</span>';
+    return;
+  }
+
+  const headers = { 'Authorization': 'Bearer ' + didaToken };
+
+  // 正确的 API 基础路径：https://api.dida365.com/open/v1
+  const BASE = 'https://api.dida365.com/open/v1';
+
+  try {
+    // 第一步：获取所有项目
+    const projRes = await fetch(BASE + '/project', { headers });
+    console.log('滴答清单 /project → HTTP', projRes.status);
+    if (!projRes.ok) {
+      const text = await projRes.text().catch(() => '');
+      console.error('滴答清单 /project 响应:', text.slice(0, 300));
+      throw new Error('HTTP ' + projRes.status);
+    }
+    const projects = await projRes.json();
+    console.log('滴答清单 项目:', Array.isArray(projects) ? projects.length : '非数组', '个');
+
+    // 打印每个项目的名称和 kind，帮助定位收集箱
+    if (Array.isArray(projects)) {
+      projects.forEach(p => console.log('  ', p.kind, p.name, '(' + p.id + ')'));
+    }
+
+    if (!Array.isArray(projects) || projects.length === 0) {
+      todoContent.innerHTML = '<span style="color:var(--text-secondary);">今天没有待办任务 🎉</span>';
+      return;
+    }
+
+    // 收集箱的 projectId 固定为字符串 "inbox"
+    const targetProjects = [{ id: 'inbox', name: '收集箱' }];
+    console.log('滴答清单 收集箱: 使用固定 projectId="inbox"');
+
+    // 从目标项目获取未完成任务（每项目最多 3 条，总计最多 5 条）
+    let allTasks = [];
+    for (const proj of targetProjects) {
+      if (allTasks.length >= 5) break;
+      try {
+        const dataRes = await fetch(BASE + '/project/' + encodeURIComponent(proj.id) + '/data', { headers });
+        console.log('  ' + proj.name, '→ HTTP', dataRes.status, 'kind=' + proj.kind);
+        if (!dataRes.ok) continue;
+        const data = await dataRes.json();
+        const tasks = data.tasks || data.syncTaskBean || [];
+
+        // 打印前 2 条任务的字段名，查看日期字段
+        if (tasks.length > 0) {
+          console.log('    任务字段:', Object.keys(tasks[0]));
+          console.log('    前2条样本:', JSON.stringify(tasks.slice(0, 2)));
+        }
+
+        // 过滤：未完成 + 日期为今天或更早（逾期也显示）
+        const todayStr = new Date().toISOString().slice(0, 10); // "2026-06-18"
+        const incomplete = tasks.filter(t => {
+          if (t.completedTime) return false;
+          if (t.status !== 0 && t.status !== '0') return false;
+          // 检查是否是今天或逾期的任务
+          const taskDate = t.dueDate || t.startDate || '';
+          if (!taskDate) return true; // 没有日期的也显示
+          return taskDate <= todayStr;
+        }).slice(0, 8);
+        console.log('    任务', tasks.length, '条, 未完成(今日/逾期)', incomplete.length, '条');
+        allTasks = allTasks.concat(incomplete.map(t => ({ ...t, projectName: proj.name })));
+      } catch (e) { console.log('    请求异常:', e.message); }
+    }
+    allTasks = allTasks.slice(0, 8); // 总计最多 8 条
+
+    console.log('滴答清单 未完成任务:', allTasks.length, '条');
+    if (allTasks.length === 0) {
+      todoContent.innerHTML = '<span style="color:var(--text-secondary);">今天没有待办任务 🎉</span>';
+      return;
+    }
+
+    todoContent.innerHTML = '<ul class="todo-list">' +
+      allTasks.slice(0, 8).map(t =>
+        '<li><span class="todo-check">☐</span><span class="todo-title">' +
+        escapeHtml(t.title) +
+        '</span></li>'
+      ).join('') +
+      '</ul>';
+
+  } catch (e) {
+    console.error('滴答清单获取失败:', e);
+    todoContent.innerHTML = '<span style="color:#e05555;">获取失败，请检查 Token</span>';
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadTodoList();
+
 // --- 回车快捷确认 ---
 purposeInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') confirmBtn.click();

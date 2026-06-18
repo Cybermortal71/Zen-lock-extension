@@ -216,6 +216,20 @@
       background: #f0f4f8;
     }
 
+    /* --- 今日待办 --- */
+    .todo-card {
+      background: var(--card-bg); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 20px 24px;
+      max-width: 420px; width: 100%; margin: 0 auto 24px;
+    }
+    .todo-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+    .todo-content { font-size: 13px; color: var(--text-secondary); line-height: 1.8; }
+    .todo-list { list-style: none; padding: 0; }
+    .todo-list li { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f4f8; }
+    .todo-list li:last-child { border-bottom: none; }
+    .todo-list .todo-check { color: #c0c8d0; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .todo-list .todo-title { flex: 1; }
+
     /* --- Toast --- */
     .toast {
       position: fixed;
@@ -293,6 +307,12 @@
       <button class="btn btn-secondary" id="backBtn">返回</button>
       <button class="btn btn-primary" id="confirmBtn">确认解锁</button>
     </div>
+  </div>
+
+  <!-- 今日待办 -->
+  <div class="todo-card" id="todoCard">
+    <h3>📋 今日待办</h3>
+    <div id="todoContent" class="todo-content">加载中…</div>
   </div>
 
   <div class="toast" id="toast"></div>
