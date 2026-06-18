@@ -9,7 +9,12 @@ const customRow = document.getElementById('customRow');
 const customMinutesInput = document.getElementById('customMinutes');
 const confirmBtn = document.getElementById('confirmBtn');
 const backBtn = document.getElementById('backBtn');
+const purposeHint = document.getElementById('purposeHint');
 const toast = document.getElementById('toast');
+
+// --- 意图审核状态 ---
+let promptCount = 0; // 当前解锁流程中已追问次数
+const MAX_PROMPTS = 3; // 最多追问 3 次，第 4 次放行但标记
 
 // --- 解析 URL 参数 ---
 const params = new URLSearchParams(location.search);
@@ -57,6 +62,27 @@ function getPlannedMinutes() {
   return parseInt(durationSelect.value, 10);
 }
 
+// --- 意图审核：检测模糊目的 ---
+const FUZZY_KEYWORDS = ['随便看看', '不知道', '无聊', '打发时间', '没什么', '不想说', '看看', '逛逛'];
+
+function isFuzzyPurpose(text) {
+  const t = text.trim();
+  if (t.length < 5) return true;
+  const lower = t.toLowerCase();
+  return FUZZY_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function showPurposeHint(times) {
+  const remaining = MAX_PROMPTS - times;
+  const suffix = remaining > 0 ? `（还可以追问 ${remaining} 次）` : '（最后一次提醒）';
+  purposeHint.textContent = `能再具体一点吗？比如「查资料」或「看一集更新的剧」。${suffix}`;
+  purposeHint.style.display = 'block';
+}
+
+function hidePurposeHint() {
+  purposeHint.style.display = 'none';
+}
+
 // --- 确认解锁 ---
 confirmBtn.addEventListener('click', async () => {
   if (!targetUrl) {
@@ -66,9 +92,28 @@ confirmBtn.addEventListener('click', async () => {
 
   const purpose = purposeInput.value.trim();
   if (!purpose) {
+    hidePurposeHint();
     showToast('请填写访问目的');
     purposeInput.focus();
     return;
+  }
+
+  // --- 意图审核 ---
+  let lowQuality = false;
+  if (isFuzzyPurpose(purpose)) {
+    if (promptCount < MAX_PROMPTS) {
+      promptCount++;
+      showPurposeHint(promptCount);
+      purposeInput.focus();
+      return; // 追问，阻止解锁
+    }
+    // 超过追问次数上限 → 放行但标记
+    lowQuality = true;
+    hidePurposeHint();
+    promptCount = 0;
+  } else {
+    hidePurposeHint();
+    promptCount = 0;
   }
 
   const plannedMinutes = getPlannedMinutes();
@@ -107,6 +152,13 @@ confirmBtn.addEventListener('click', async () => {
   const { unlockCount } = await chrome.storage.local.get('unlockCount');
   await chrome.storage.local.set({ unlockCount: (unlockCount || 0) + 1 });
 
+  // 1.6 低质量目的计数
+  if (lowQuality) {
+    const { lowQualityCount } = await chrome.storage.local.get('lowQualityCount');
+    await chrome.storage.local.set({ lowQualityCount: (lowQualityCount || 0) + 1 });
+    console.log('⚠️ 低质量目的解锁:', purpose);
+  }
+
   // 2. 写入 currentSession（为后续审核/盆栽做准备）
   await chrome.storage.local.set({
     currentSession: {
@@ -115,7 +167,8 @@ confirmBtn.addEventListener('click', async () => {
       purpose,
       plannedMinutes,
       passExpiry,
-      startTime: now
+      startTime: now,
+      lowQuality
     }
   });
 
