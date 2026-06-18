@@ -537,7 +537,7 @@ async function harvestFruit() {
       await chrome.storage.local.set({ achievements: unlocked });
       const a = ACHIEVEMENTS.ultimateDiscipline;
       chrome.notifications.create('achieve_ultimateDiscipline', {
-        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        type: 'basic', iconUrl: chrome.runtime.getURL('pic/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
     }
@@ -553,14 +553,14 @@ async function harvestFruit() {
       await chrome.storage.local.set({ achievements: unlocked });
       const a = ACHIEVEMENTS.fruitCollector;
       chrome.notifications.create('achieve_fruitCollector', {
-        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        type: 'basic', iconUrl: chrome.runtime.getURL('pic/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
     }
   }
 
   chrome.notifications.create('harvest_' + Date.now(), {
-    type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+    type: 'basic', iconUrl: chrome.runtime.getURL('pic/icon128.png'),
     title: '🎉 你的植物结出了【' + fruit.name + '】！',
     message: fruit.emoji + ' ' + fruit.description
   });
@@ -698,7 +698,7 @@ async function checkAchievements(wasPositive) {
     for (const id of newlyUnlocked) {
       const a = ACHIEVEMENTS[id];
       chrome.notifications.create('achieve_' + id, {
-        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        type: 'basic', iconUrl: chrome.runtime.getURL('pic/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
     }
@@ -754,7 +754,7 @@ async function checkGentleGuardian() {
     await chrome.storage.local.set({ achievements: unlocked });
     const a = ACHIEVEMENTS.gentleGuardian;
     chrome.notifications.create('achieve_gentleGuardian', {
-      type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      type: 'basic', iconUrl: chrome.runtime.getURL('pic/icon128.png'),
       title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
     });
   }
@@ -849,7 +849,7 @@ async function dailyCleanup() {
       await chrome.storage.local.set({ achievements: unlocked });
       const a = ACHIEVEMENTS.quietWeek;
       chrome.notifications.create('achieve_quietWeek', {
-        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        type: 'basic', iconUrl: chrome.runtime.getURL('pic/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
     }
