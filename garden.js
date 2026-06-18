@@ -161,7 +161,6 @@ async function load() {
     </div>`;
   }).join('');
 
-  console.log('🌿 盆栽加载: gp=' + gp + ' stage=' + stage.name + ' fruits=' + fruits.length + ' events=' + events.length);
 }
 
 load();

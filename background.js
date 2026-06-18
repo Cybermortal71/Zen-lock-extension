@@ -3,7 +3,12 @@
 // 精确网站活跃时间监测 + SW 休眠防护 + 定期数据清理
 // ============================================================
 
-console.log('[Zenlock] SW starting at', new Date().toISOString());
+
+// --- 安全写存储 ---
+async function safeSet(obj) {
+  try { await chrome.storage.local.set(obj); }
+  catch (e) { console.error('存储写入失败:', e); }
+}
 
 // ---- 内存态：当前追踪状态 ----
 let currentDomain = null;   // 正在计时的域名
@@ -222,14 +227,12 @@ async function hasValidPass(domain) {
   if (!expiry) return false;
 
   if (Date.now() < expiry) {
-    console.log('[Zenlock] 通行证有效，剩余', Math.floor((expiry - Date.now()) / 60000), '分钟:', domain);
     return true;
   }
 
   // 已过期 → 清理
   delete all[domain];
   await chrome.storage.local.set({ passes: all });
-  console.log('[Zenlock] 通行证已过期，已清理:', domain);
   return false;
 }
 
@@ -282,7 +285,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     return false;
   });
 
-  console.log('[拦截检查]', dom, '(标准化:', normalizedDom, ') 是否在黑名单:', isBlocked, '| 黑名单:', list);
 
   if (!isBlocked) return; // 不在黑名单，放行
 
@@ -293,7 +295,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const unlockUrl = chrome.runtime.getURL('unlock.html') +
     '?target=' + encodeURIComponent(url);
 
-  console.log('🔒 [拦截]', dom, '→ 重定向到解锁页:', unlockUrl);
   await chrome.tabs.update(tabId, { url: unlockUrl });
 });
 
@@ -312,7 +313,6 @@ chrome.idle.onStateChanged.addListener(async (state) => {
       currentDomain = null;
       currentStartTime = null;
       await persistTrackingState();
-      console.log('⏸ 空闲/锁定，计时已暂停');
     }
   } else if (state === 'active') {
     // 恢复计时
@@ -325,7 +325,6 @@ chrome.idle.onStateChanged.addListener(async (state) => {
           currentDomain = dom;
           currentStartTime = now;
           await persistTrackingState();
-          console.log('▶ 恢复计时:', dom);
         }
       } catch {
         // 无活跃标签页
@@ -342,7 +341,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   const name = alarm.name;
 
   if (name === 'keepAlive') {
-    console.log('💓 keepAlive @', new Date().toISOString());
     await chrome.storage.local.get('timeLog');
     await verifyTracking();
 
@@ -375,7 +373,6 @@ async function verifyTracking() {
     }
     const dom = hostname(tab.url);
     if (dom !== currentDomain) {
-      console.log('🔧 keepAlive 发现域名不一致，自动修正:', currentDomain, '→', dom);
       await switchDomain(dom);
     }
   } catch {
@@ -406,7 +403,6 @@ async function findTabsByDomain(domain) {
  * 时间提醒：距离规划结束还有 2 分钟
  */
 async function handleTimeWarning(domain) {
-  console.log('⏰ [提醒]', domain, '— 距离规划结束还有 2 分钟');
 
   const tabs = await findTabsByDomain(domain);
   for (const tab of tabs) {
@@ -426,7 +422,6 @@ async function handleTimeWarning(domain) {
  * 时间到：清除通行证，重定向到 timeup 页面
  */
 async function handleTimeExpire(domain) {
-  console.log('⏰ [到期]', domain, '— 通行证已失效');
 
   // 清除该根域名的通行证
   const rootDomain = getRootDomain(domain);
@@ -455,7 +450,6 @@ async function handleTimeExpire(domain) {
       '&target=' + encodeURIComponent(tab.url);
 
     await chrome.tabs.update(tab.id, { url: timeupUrl });
-    console.log('🔒 [到期] 已重定向标签页:', tab.id, domain);
   }
 
   // --- 生长值结算 ---
@@ -476,14 +470,14 @@ const PLANT_STAGES = [
 ];
 
 const FRUIT_POOL = [
-  { name: '专注番茄', emoji: '🍅', description: '你像番茄钟一样可靠。' },
-  { name: '耐心多肉', emoji: '🪴', description: '慢慢来，比较快。' },
+  { name: '专注番茄', emoji: '🍅', description: '番茄是一种态度' },
+  { name: '耐心多肉', emoji: '🪴', description: '慢慢来，比较快' },
   { name: '死线射手', emoji: '🎯', description: '在截止时间前优雅离场。' },
-  { name: '摸鱼克星', emoji: '🦈', description: '战胜摸鱼欲望的一天！' },
-  { name: '时间琥珀', emoji: '💎', description: '把易逝的时间凝结成光。' },
-  { name: '自律荔枝', emoji: '🍒', description: '自律的果实总是甜美的。' },
-  { name: '早睡仙人掌', emoji: '🌵', description: '不熬夜的勋章。' },
-  { name: '反拖延松果', emoji: '🥜', description: '今天没拖延。' }
+  { name: '摸鱼克星', emoji: '🦈', description: '大哈鱼别乱摸' },
+  { name: '时间琥珀', emoji: '💎', description: '璀璨时间凝聚的晶石' },
+  { name: '自律荔枝', emoji: '🍒', description: '别让欲望击穿了你的荔枝' },
+  { name: '早睡仙人掌', emoji: '🌵', description: '不早睡扎你。' },
+  { name: '反拖延松果', emoji: '🥜', description: '快行动起来！（其实是花生）' }
 ];
 
 // 当次会话结果
@@ -515,7 +509,6 @@ async function applyGrowth(points, reason) {
 
   await chrome.storage.local.set({ growthPoints: gp, _dailyGrowth: dg });
   await logGrowthEvent(actualPoints, reason);
-  console.log('🌱 生长值:', gp, '(今日变化:', cappedChange, ')');
 
   // 达到 150 → 收获果实
   if (gp >= 150) {
@@ -547,7 +540,6 @@ async function harvestFruit() {
         type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
-      console.log('🏆 成就解锁:', a.name);
     }
   }
 
@@ -564,11 +556,9 @@ async function harvestFruit() {
         type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
-      console.log('🏆 成就解锁:', a.name);
     }
   }
 
-  console.log('🎉 收获果实:', fruit.name);
   chrome.notifications.create('harvest_' + Date.now(), {
     type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
     title: '🎉 你的植物结出了【' + fruit.name + '】！',
@@ -589,7 +579,6 @@ async function settleGrowth(domain) {
     outcome = saved[root];
   }
   if (!outcome) {
-    console.log('🌱 结算跳过:', root, '（无对应会话记录，可能 SW 曾被回收）');
     return;
   }
 
@@ -602,7 +591,6 @@ async function settleGrowth(domain) {
     points = 4; reason = '按时完成 ' + root;
   }
 
-  console.log('🌱 结算:', reason, '→', points, '分');
   const actual = await applyGrowth(points, reason);
 
   // 清理内存和持久化的记录
@@ -709,7 +697,6 @@ async function checkAchievements(wasPositive) {
     await chrome.storage.local.set({ achievements: unlocked });
     for (const id of newlyUnlocked) {
       const a = ACHIEVEMENTS[id];
-      console.log('🏆 成就解锁:', a.name);
       chrome.notifications.create('achieve_' + id, {
         type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
@@ -770,7 +757,6 @@ async function checkGentleGuardian() {
       type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
       title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
     });
-    console.log('🏆 成就解锁:', a.name);
   }
 }
 
@@ -779,7 +765,6 @@ async function checkGentleGuardian() {
 // ============================================================
 
 async function dailyCleanup() {
-  console.log('🧹 每日清理 @', new Date().toISOString());
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);
@@ -867,12 +852,10 @@ async function dailyCleanup() {
         type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
         title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
       });
-      console.log('🏆 成就解锁:', a.name);
     }
   }
 
   const deleted = sessionsChanged || timeLogChanged || passesChanged;
-  console.log(deleted ? `  已删除 ${cutoffKey} 之前的数据` : '  无需清理');
 }
 
 // ============================================================
@@ -900,7 +883,6 @@ async function boot() {
     currentStartTime = lastStart;
     isIdle = false;
     await flushCurrentSegment(cappedEnd);
-    console.log('🔄 已恢复并结束残留片段:', currentDomain);
   }
 
   // ---- 开始追踪当前活跃标签 ----
@@ -912,12 +894,10 @@ async function boot() {
       currentDomain = dom;
       currentStartTime = Date.now();
       await persistTrackingState();
-      console.log('🚀 ZenLock 启动，当前追踪:', dom);
     } else {
       currentDomain = null;
       currentStartTime = null;
       await persistTrackingState();
-      console.log('🚀 ZenLock 启动，无活跃网页标签');
     }
   } catch {
     currentDomain = null;
@@ -961,7 +941,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     _noBlacklistStreak: local._noBlacklistStreak ?? 0
   });
 
-  console.log('✅ ZenLock 初始化完成 (install/update)');
 });
 
 // ============================================================
@@ -969,7 +948,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 // ============================================================
 chrome.alarms.clear('keepAlive').then(() => {
   chrome.alarms.create('keepAlive', { periodInMinutes: 15 });
-  console.log('[Zenlock] keepAlive alarm registered');
 });
 
 // ============================================================

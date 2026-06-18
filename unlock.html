@@ -58,7 +58,8 @@
       box-shadow: var(--shadow);
       padding: 32px 28px;
       max-width: 420px;
-      width: 100%;
+      flex: 1;
+      min-width: 300px;
     }
 
     /* --- 头部 --- */
@@ -222,6 +223,8 @@
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
     }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-secondary:active { transform: scale(0.97); }
 
     .btn-secondary {
       background: transparent;
@@ -237,8 +240,10 @@
     .todo-card {
       background: var(--card-bg); border-radius: var(--radius);
       box-shadow: var(--shadow); padding: 20px 24px;
-      max-width: 420px; width: 100%; margin: 0 auto 24px;
+      max-width: 420px; flex: 1; min-width: 250px;
+      display: flex; flex-direction: column;
     }
+    .todo-content { flex: 1; }
     .todo-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
     .todo-content { font-size: 13px; color: var(--text-secondary); line-height: 1.8; }
     .todo-list { list-style: none; padding: 0; }
@@ -267,9 +272,11 @@
     .toast.show {
       opacity: 1;
     }
+    button:active, .btn:active, .btn-sm:active { transform: scale(0.97); }
   </style>
 </head>
 <body>
+  <div style="display:flex;gap:20px;align-items:stretch;justify-content:center;max-width:860px;width:100%;">
   <div class="card">
     <div class="header">
       <div class="logo">ZenLock</div>
@@ -330,6 +337,7 @@
   <div class="todo-card" id="todoCard">
     <h3>📋 今日待办</h3>
     <div id="todoContent" class="todo-content">加载中…</div>
+  </div>
   </div>
 
   <div class="toast" id="toast"></div>

@@ -156,7 +156,6 @@ confirmBtn.addEventListener('click', async () => {
   if (lowQuality) {
     const { lowQualityCount } = await chrome.storage.local.get('lowQualityCount');
     await chrome.storage.local.set({ lowQualityCount: (lowQualityCount || 0) + 1 });
-    console.log('⚠️ 低质量目的解锁:', purpose);
   }
 
   // 2. 写入 currentSession（为后续审核/盆栽做准备）
@@ -182,13 +181,11 @@ confirmBtn.addEventListener('click', async () => {
   // expire 闹钟：规划用时结束时触发（至少 0.1 分钟）
   const expireDelay = Math.max(0.1, plannedMinutes);
   await chrome.alarms.create(alarmBase + '_expire', { delayInMinutes: expireDelay });
-  console.log('⏰ 到期闹钟已创建:', alarmBase + '_expire', '延迟', expireDelay, '分钟');
 
   // warning 闹钟：规划结束前 2 分钟触发（仅当 > 2 分钟时）
   if (plannedMinutes > 2) {
     const warningDelay = Math.max(0.1, plannedMinutes - 2);
     await chrome.alarms.create(alarmBase + '_warning', { delayInMinutes: warningDelay });
-    console.log('⏰ 提醒闹钟已创建:', alarmBase + '_warning', '延迟', warningDelay, '分钟');
   }
 
   // 通知 background 会话开始（用于生长值追踪）
@@ -198,7 +195,6 @@ confirmBtn.addEventListener('click', async () => {
     lowQuality
   });
 
-  console.log('🔓 已解锁:', domain, '(根:', rootDomain, ') 有效期', plannedMinutes, '分钟');
 
   // 4. 延迟 300ms 确保 storage 已落盘，再跳转
   setTimeout(() => {
@@ -246,18 +242,15 @@ async function loadTodoList() {
   try {
     // 第一步：获取所有项目
     const projRes = await fetch(BASE + '/project', { headers });
-    console.log('滴答清单 /project → HTTP', projRes.status);
     if (!projRes.ok) {
       const text = await projRes.text().catch(() => '');
       console.error('滴答清单 /project 响应:', text.slice(0, 300));
       throw new Error('HTTP ' + projRes.status);
     }
     const projects = await projRes.json();
-    console.log('滴答清单 项目:', Array.isArray(projects) ? projects.length : '非数组', '个');
 
     // 打印每个项目的名称和 kind，帮助定位收集箱
     if (Array.isArray(projects)) {
-      projects.forEach(p => console.log('  ', p.kind, p.name, '(' + p.id + ')'));
     }
 
     if (!Array.isArray(projects) || projects.length === 0) {
@@ -267,7 +260,6 @@ async function loadTodoList() {
 
     // 收集箱的 projectId 固定为字符串 "inbox"
     const targetProjects = [{ id: 'inbox', name: '收集箱' }];
-    console.log('滴答清单 收集箱: 使用固定 projectId="inbox"');
 
     // 从目标项目获取未完成任务（每项目最多 3 条，总计最多 5 条）
     let allTasks = [];
@@ -275,15 +267,12 @@ async function loadTodoList() {
       if (allTasks.length >= 5) break;
       try {
         const dataRes = await fetch(BASE + '/project/' + encodeURIComponent(proj.id) + '/data', { headers });
-        console.log('  ' + proj.name, '→ HTTP', dataRes.status, 'kind=' + proj.kind);
         if (!dataRes.ok) continue;
         const data = await dataRes.json();
         const tasks = data.tasks || data.syncTaskBean || [];
 
         // 打印前 2 条任务的字段名，查看日期字段
         if (tasks.length > 0) {
-          console.log('    任务字段:', Object.keys(tasks[0]));
-          console.log('    前2条样本:', JSON.stringify(tasks.slice(0, 2)));
         }
 
         // 过滤：未完成 + 日期为今天或更早（逾期也显示）
@@ -296,13 +285,11 @@ async function loadTodoList() {
           if (!taskDate) return true; // 没有日期的也显示
           return taskDate <= todayStr;
         }).slice(0, 8);
-        console.log('    任务', tasks.length, '条, 未完成(今日/逾期)', incomplete.length, '条');
         allTasks = allTasks.concat(incomplete.map(t => ({ ...t, projectName: proj.name })));
-      } catch (e) { console.log('    请求异常:', e.message); }
+      } catch (e) { /* 单个项目获取失败不影响其他 */ }
     }
     allTasks = allTasks.slice(0, 8); // 总计最多 8 条
 
-    console.log('滴答清单 未完成任务:', allTasks.length, '条');
     if (allTasks.length === 0) {
       todoContent.innerHTML = '<span style="color:var(--text-secondary);">今天没有待办任务 🎉</span>';
       return;
@@ -318,7 +305,7 @@ async function loadTodoList() {
 
   } catch (e) {
     console.error('滴答清单获取失败:', e);
-    todoContent.innerHTML = '<span style="color:#e05555;">获取失败，请检查 Token</span>';
+    todoContent.innerHTML = '<span style="color:#e05555;">出了点小问题，请检查 Token 是否有效</span>';
   }
 }
 

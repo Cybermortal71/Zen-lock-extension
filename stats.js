@@ -12,7 +12,6 @@
   }
 
   function init() {
-    console.log('[Zenlock Stats] 页面初始化开始');
 
     const datePicker = document.getElementById('datePicker');
     const prevDayBtn = document.getElementById('prevDayBtn');
@@ -121,9 +120,7 @@
     }
 
     function setDateStr(d, skipPicker) {
-      console.log('[Zenlock Stats] setDateStr d=' + d + ' skipPicker=' + skipPicker + ' currentDate=' + currentDate);
       if (d === currentDate) {
-        console.log('[Zenlock Stats] 日期未变，跳过');
         return;
       }
       currentDate = d;
@@ -404,7 +401,6 @@
         if (zoomRange) {
           zoomRange = null;
           resetZoomBtn.style.display = 'none';
-          console.log('[Zenlock Stats] 缩放已重置');
           scheduleRedraw();
         }
         return;
@@ -412,7 +408,6 @@
 
       zoomRange = { start: startH, end: endH };
       resetZoomBtn.style.display = 'inline-block';
-      console.log('[Zenlock Stats] 缩放至:', fmtTime(startH), '–', fmtTime(endH));
       scheduleRedraw();
     });
 
@@ -439,7 +434,6 @@
       );
       const order = domainOrderCache.length ? domainOrderCache : [...new Set(valid.map(s => s.domain))];
       drawWaterfall(chartCanvas, valid, order, null);
-      console.log('[Zenlock Stats] 缩放已重置');
     });
 
     // --- 加载 & 渲染 ---
@@ -450,20 +444,16 @@
         redrawPending = null;
       }
 
-      console.log('[Zenlock Stats] ====== 加载日期:', dateStr, '======');
 
       const storageData = await chrome.storage.local.get(['sessions', 'timeLog']);
 
       // 强力诊断：打印每个日期的 session 数量 + 首条样本
       const allSessionsRaw = storageData.sessions || {};
       const dateKeys = Object.keys(allSessionsRaw).sort();
-      console.log('[Zenlock Stats] ========== 全部日期诊断 ==========');
       dateKeys.forEach(k => {
         const arr = allSessionsRaw[k] || [];
         const sample = arr.length > 0 ? `${arr[0].domain} ${new Date(arr[0].start).toLocaleTimeString()}-${new Date(arr[0].end).toLocaleTimeString()}` : '(空)';
-        console.log(`[Zenlock Stats]   日期键=${k}  session数=${arr.length}  首条=${sample}`);
       });
-      console.log('[Zenlock Stats] ==========================================');
 
       let daySessions = (allSessionsRaw[dateStr] || []).slice(); // 浅拷贝避免引用问题
 
@@ -488,17 +478,11 @@
         mergeStats[root].count++;
         mergeStats[root].before.add(s._origDomain);
       });
-      console.log('[Zenlock Stats] 根域名合并结果:', Object.entries(mergeStats).map(([k,v]) =>
-        `${k}(${[...v.before].join(',')}) ${v.count}条`
-      ));
 
-      console.log('[Zenlock Stats] 当天 session 数量:', daySessions.length, '(过滤后)');
       if (daySessions.length > 0) {
-        console.log('[Zenlock Stats] 前 3 条 sessions:', JSON.stringify(daySessions.slice(0, 3)));
         daySessions.forEach((s, i) => {
           const durMs = s.end - s.start;
           const durSec = Math.floor(durMs / 1000);
-          console.log(`[Zenlock Stats]   [${i}] domain=${s.domain} gap_ms=${durMs} gap_sec=${durSec} gap_fmt=${formatDuration(durSec)}`);
         });
       }
 
@@ -528,16 +512,13 @@
         if (s.start <= 0 || s.end <= 0) { skipped++; return; }
         if (s.end < s.start) { skipped++; return; }
         const dur = Math.floor((s.end - s.start) / 1000);
-        if (dur > 86400) { console.warn('[Zenlock Stats] 跳过超长 session (>24h):', s); skipped++; return; }
         totalSec += dur;
       });
 
-      console.log('[Zenlock Stats] 汇总 totalSec:', totalSec, '→', formatDuration(totalSec), '| 域名:', domainSet.size, '| 跳过:', skipped);
 
       // --- 累计解锁次数（每次确认解锁 +1） ---
       const { unlockCount } = await chrome.storage.local.get('unlockCount');
       const ulk = unlockCount || 0;
-      console.log('[Zenlock Stats] 累计解锁次数:', ulk);
 
       totalTimeEl.textContent = formatDuration(totalSec);
       domainCountEl.textContent = domainSet.size;
@@ -562,7 +543,6 @@
       });
       const domainOrder = [...new Set(daySessions.map(s => s.domain))];
       domainOrder.sort((a, b) => (domainFirstSeen[a] || 0) - (domainFirstSeen[b] || 0));
-      console.log('[Zenlock Stats] 域名顺序:', domainOrder);
 
       // --- 缓存供缩放时重绘 ---
       const validSessions = daySessions.filter(s =>
@@ -574,12 +554,9 @@
       daySessionsCache = validSessions;
       domainOrderCache = domainOrder;
 
-      console.log('[Zenlock Stats] 有效 session 用于绘图:', validSessions.length, '域名:', domainOrder.join(', '));
       if (validSessions.length > 0) {
-        console.log('[Zenlock Stats] 绘图数据样本:', JSON.stringify(validSessions.slice(0, 3).map(s => ({ d: s.domain, t: fmtTime(tsToHours(s.start)) + '-' + fmtTime(tsToHours(s.end)) }))));
       }
       drawWaterfall(chartCanvas, validSessions, domainOrder, null);
-      console.log('[Zenlock Stats] Canvas 绘制完成');
     }
 
     // ============================================================
@@ -639,7 +616,6 @@
       }
 
       const summary = lines.join('\n');
-      console.log('[Zenlock Stats] 周报数据摘要:\n', summary);
 
       // 显示 loading
       generateReportBtn.disabled = true;
@@ -683,7 +659,6 @@
         reportResult.innerHTML =
           '<div style="font-weight:600;color:var(--primary);margin-bottom:8px;">📋 AI 周报总结</div>' +
           '<div>' + aiText.replace(/\n/g, '<br>') + '</div>';
-        console.log('[Zenlock Stats] AI 周报生成成功');
 
       } catch (e) {
         console.error('[Zenlock Stats] AI 周报失败:', e);
@@ -709,6 +684,5 @@
     datePicker.value = currentDate;
     dateLabel.textContent = currentDate;
     loadAndRender(currentDate);
-    console.log('[Zenlock Stats] 初始化完成（Canvas 模式）');
   }
 })();

@@ -54,7 +54,6 @@ async function checkAndAutoResume() {
 
     if (expiry && Date.now() < expiry) {
       hintText.textContent = '检测到通行证已恢复，正在跳转…';
-      console.log('🔄 [自动恢复]', rootDomain, '通行证有效，跳回:', targetUrl);
       location.href = targetUrl;
       return true;
     }
@@ -106,16 +105,13 @@ async function broadcastResumeToSiblings() {
         setTimeout(async () => {
           try {
             await chrome.tabs.update(item.tabId, { url: item.url });
-            console.log('🔄 [广播恢复] 已恢复标签页', item.tabId, '→', item.url, '(延迟', delay, 'ms)');
           } catch (e) {
-            console.warn('[广播恢复] 标签页', item.tabId, '恢复失败:', e);
           }
           resolve();
         }, delay);
       });
     }
   } catch (e) {
-    console.warn('[广播恢复] 出错:', e);
   }
 }
 
@@ -143,7 +139,6 @@ extendBtn.addEventListener('click', async () => {
   // 通知 background 会话已延长
   chrome.runtime.sendMessage({ action: 'sessionExtend', domain: rootDomain });
 
-  console.log('🔄 已延长:', rootDomain, '额外 5 分钟');
 
   // 广播恢复其他同域名 timeup 标签页
   await broadcastResumeToSiblings();
