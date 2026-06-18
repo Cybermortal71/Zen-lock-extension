@@ -193,6 +193,23 @@
     .toast.show {
       opacity: 1;
     }
+    /* --- 小问号提示按钮 --- */
+    .help-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 1.5px solid #c0c8d4; background: transparent;
+      font-size: 12px; font-weight: 700; color: #8b94a0;
+      cursor: pointer; vertical-align: middle; margin-left: 4px;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .help-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .help-bubble {
+      position: absolute; z-index: 50;
+      background: #fff; border: 1px solid #dce6f0; border-radius: 10px;
+      padding: 10px 14px; font-size: 12px; color: var(--text-secondary);
+      line-height: 1.6; max-width: 260px; box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+      display: none; white-space: normal; font-weight: 400;
+    }
   </style>
 </head>
 <body>
@@ -204,7 +221,7 @@
 
     <!-- 添加域名 -->
     <div class="card">
-      <h2>添加黑名单网站</h2>
+      <h2>添加黑名单网站<button class="help-btn" data-help="bl">?</button></h2>
       <div class="input-row">
         <input
           type="text"
@@ -224,7 +241,7 @@
 
     <!-- 滴答清单 Token -->
     <div class="card">
-      <h2>滴答清单 Token</h2>
+      <h2>滴答清单 Token<button class="help-btn" data-help="dida">?</button></h2>
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">用于同步任务到滴答清单，Token 仅保存在本地。</p>
       <div class="input-row">
         <input
@@ -239,7 +256,7 @@
 
     <!-- DeepSeek API Key -->
     <div class="card">
-      <h2>DeepSeek API Key</h2>
+      <h2>DeepSeek API Key<button class="help-btn" data-help="ds">?</button></h2>
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">用于生成浏览周报，Key 仅保存在本地。</p>
       <div class="input-row">
         <input

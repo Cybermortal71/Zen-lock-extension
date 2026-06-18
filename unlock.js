@@ -330,6 +330,32 @@ function escapeHtml(str) {
 
 loadTodoList();
 
+// --- 小问号提示 ---
+const HELP_TEXTS = {
+  purpose: '想清楚这次访问的目的，能帮你更自觉地控制时间。如果目的太模糊，我会再问你一次哦。',
+  duration: '设定一个合理的时间，时间快到时我会温柔提醒你。'
+};
+let activeBubble = null;
+document.querySelectorAll('.help-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeBubble) { activeBubble.remove(); activeBubble = null; }
+    const key = btn.dataset.help;
+    const bubble = document.createElement('div');
+    bubble.className = 'help-bubble';
+    bubble.textContent = HELP_TEXTS[key] || '';
+    bubble.style.display = 'block';
+    const rect = btn.getBoundingClientRect();
+    const parentRect = btn.parentElement.getBoundingClientRect();
+    bubble.style.left = '0px';
+    bubble.style.top = (rect.bottom - parentRect.top + 6) + 'px';
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(bubble);
+    activeBubble = bubble;
+  });
+});
+document.addEventListener('click', () => { if (activeBubble) { activeBubble.remove(); activeBubble = null; } });
+
 // --- 回车快捷确认 ---
 purposeInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') confirmBtn.click();

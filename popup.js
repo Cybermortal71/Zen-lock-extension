@@ -37,13 +37,12 @@ function formatDuration(sec) {
 function renderTop5(dayLogs, hasTimeLog) {
   const list = document.getElementById('topList');
 
-  if (!hasTimeLog) {
-    list.innerHTML = '<li class="empty-hint">暂无数据（后台可能尚未启动）</li>';
-    return;
-  }
-
-  if (!dayLogs || Object.keys(dayLogs).length === 0) {
-    list.innerHTML = '<li class="empty-hint">今天还没有浏览记录 🌱</li>';
+  if (!hasTimeLog || !dayLogs || Object.keys(dayLogs).length === 0) {
+    list.innerHTML = '<li class="empty-hint">👋 欢迎使用 ZenLock！<br>去<a href="#" id="goOptionsLink">选项页</a>设置黑名单网站，开始你的专注之旅吧。</li>';
+    setTimeout(() => {
+      const link = document.getElementById('goOptionsLink');
+      if (link) link.addEventListener('click', (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
+    }, 0);
     return;
   }
 

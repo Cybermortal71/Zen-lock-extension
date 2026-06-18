@@ -104,6 +104,9 @@ async function load() {
     // 实际收获由 background.js 的 applyGrowth 处理，这里仅展示动画
   }
 
+  // 种子阶段引导
+  document.getElementById('seedHint').style.display = (gp < 10) ? 'block' : 'none';
+
   totalPoints.textContent = gp;
   stageIndex.textContent = (PLANT_STAGES.indexOf(stage) + 1) + '/' + PLANT_STAGES.length;
 
@@ -116,7 +119,7 @@ async function load() {
 
   // --- 果实陈列室 ---
   if (fruits.length === 0) {
-    fruitGrid.innerHTML = '<div class="fruit-empty">还没有收获果实，继续专注吧 🌱</div>';
+    fruitGrid.innerHTML = '<div class="fruit-empty">🏆 这里还没有果实。当成长值达到 150 点，植物会结出第一颗果实。</div>';
   } else {
     fruitGrid.innerHTML = fruits.map(f => `
       <div class="fruit-item">
@@ -132,7 +135,7 @@ async function load() {
 
   // --- 植物日记 ---
   if (events.length === 0) {
-    diaryList.innerHTML = '<li style="text-align:center;color:var(--text-secondary);padding:16px 0;">还没有成长记录 📝</li>';
+    diaryList.innerHTML = '<li style="text-align:center;color:var(--text-secondary);padding:16px 0;">📜 还没有成长记录。完成一次黑名单网站访问，这里会出现变化。</li>';
   } else {
     diaryList.innerHTML = events.slice(0, 5).map(e => {
       const isHarvest = (e.change === 0 || e.change === 'harvest');

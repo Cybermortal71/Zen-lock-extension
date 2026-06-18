@@ -142,6 +142,34 @@ saveKeyBtn.addEventListener('click', async () => {
   showToast(key ? 'API Key 已保存' : 'API Key 已清空');
 });
 
+// --- 小问号提示 ---
+const HELP_TEXTS = {
+  bl: '将容易让你分心的网站加入此列表。访问这些网站时，Zenlock 会温柔地提醒你，并请你输入访问目的。',
+  dida: '用于在解锁页面显示今日待办任务。获取方式见安装指南。',
+  ds: '用于生成 AI 周报总结。免费申请地址：https://platform.deepseek.com/'
+};
+let activeBubble = null;
+
+document.querySelectorAll('.help-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeBubble) { activeBubble.remove(); activeBubble = null; }
+    const key = btn.dataset.help;
+    const bubble = document.createElement('div');
+    bubble.className = 'help-bubble';
+    bubble.textContent = HELP_TEXTS[key] || '';
+    bubble.style.display = 'block';
+    const rect = btn.getBoundingClientRect();
+    const parentRect = btn.parentElement.getBoundingClientRect();
+    bubble.style.left = (rect.left - parentRect.left) + 'px';
+    bubble.style.top = (rect.bottom - parentRect.top + 6) + 'px';
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(bubble);
+    activeBubble = bubble;
+  });
+});
+document.addEventListener('click', () => { if (activeBubble) { activeBubble.remove(); activeBubble = null; } });
+
 // --- 统计页面入口 ---
 document.getElementById('statsLink').addEventListener('click', (e) => {
   e.preventDefault();
