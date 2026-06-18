@@ -191,6 +191,13 @@ confirmBtn.addEventListener('click', async () => {
     console.log('⏰ 提醒闹钟已创建:', alarmBase + '_warning', '延迟', warningDelay, '分钟');
   }
 
+  // 通知 background 会话开始（用于生长值追踪）
+  chrome.runtime.sendMessage({
+    action: 'sessionStart',
+    domain: rootDomain,
+    lowQuality
+  });
+
   console.log('🔓 已解锁:', domain, '(根:', rootDomain, ') 有效期', plannedMinutes, '分钟');
 
   // 4. 延迟 300ms 确保 storage 已落盘，再跳转

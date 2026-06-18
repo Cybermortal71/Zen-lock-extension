@@ -140,6 +140,9 @@ extendBtn.addEventListener('click', async () => {
   await chrome.alarms.create(alarmBase + '_expire', { delayInMinutes: 5 });
   await chrome.alarms.create(alarmBase + '_warning', { delayInMinutes: 3 });
 
+  // 通知 background 会话已延长
+  chrome.runtime.sendMessage({ action: 'sessionExtend', domain: rootDomain });
+
   console.log('🔄 已延长:', rootDomain, '额外 5 分钟');
 
   // 广播恢复其他同域名 timeup 标签页
@@ -153,6 +156,9 @@ extendBtn.addEventListener('click', async () => {
 //  关闭页面
 // ============================================================
 closeBtn.addEventListener('click', async () => {
+  // 通知 background 用户直接关闭（未延长）
+  chrome.runtime.sendMessage({ action: 'sessionClose', domain: rootDomain });
+
   try {
     const tab = await new Promise(resolve => chrome.tabs.getCurrent(resolve));
     if (tab && tab.id) {

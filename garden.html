@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenLock - 我的盆栽</title>
+  <style>
+    :root {
+      --primary: #4a90d9; --primary-light: #e8f0fe;
+      --bg: #f5f8fc; --card-bg: #ffffff; --text: #2c3e50;
+      --text-secondary: #7f8c9b; --border: #dce6f0;
+      --radius: 14px; --shadow: 0 4px 20px rgba(74,144,217,0.10);
+      --green: #5ba85a; --gold: #d4a017;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #e8f5e9 0%, #f5f8fc 40%);
+      color: var(--text); min-height: 100vh; padding: 28px 16px;
+    }
+    .container { max-width: 520px; margin: 0 auto; }
+
+    header {
+      display: flex; align-items: center; justify-content: center;
+      position: relative; margin-bottom: 24px;
+    }
+    header h1 {
+      font-size: 26px; font-weight: 700;
+      background: linear-gradient(135deg, #4a90d9, #5ba85a);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .rules-btn {
+      position: absolute; right: 0; top: 0;
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 1.5px solid var(--border); background: var(--card-bg);
+      font-size: 16px; font-weight: 700; color: var(--text-secondary);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .rules-btn:hover { background: var(--primary-light); border-color: var(--primary); }
+
+    /* --- 规则毛玻璃弹窗 --- */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.35); backdrop-filter: blur(6px);
+      display: none; align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: rgba(255,255,255,0.96); backdrop-filter: blur(12px);
+      border-radius: 16px; padding: 28px 24px; max-width: 400px; width: 100%;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+    }
+    .modal-card h2 { font-size: 18px; margin-bottom: 16px; text-align: center; }
+    .modal-card .rule { font-size: 13px; line-height: 2; color: var(--text); }
+    .modal-card .close-btn {
+      display: block; margin: 20px auto 0; padding: 8px 28px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      background: var(--card-bg); font-size: 14px; cursor: pointer;
+    }
+
+    /* --- 植物卡片 --- */
+    .plant-card {
+      background: var(--card-bg); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 32px 24px; text-align: center;
+      margin-bottom: 16px; position: relative; overflow: hidden;
+    }
+    .plant-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #a8d5a2, #5ba85a, #4a90d9);
+    }
+    .plant-emoji { font-size: 80px; display: block; transition: transform 0.5s; }
+    @keyframes sway {
+      0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); }
+    }
+    @keyframes pulse {
+      0%,100% { transform: scale(1); } 50% { transform: scale(1.08); }
+    }
+    @keyframes glow {
+      0%,100% { filter: drop-shadow(0 0 4px rgba(212,160,23,0.3)); }
+      50% { filter: drop-shadow(0 0 20px rgba(212,160,23,0.9)); }
+    }
+    .plant-emoji.stage-seed { animation: pulse 2s infinite; }
+    .plant-emoji.stage-sprout { animation: sway 3s ease-in-out infinite; }
+    .plant-emoji.stage-seedling { animation: sway 4s ease-in-out infinite; }
+    .plant-emoji.stage-bud { animation: sway 5s ease-in-out infinite; }
+    .plant-emoji.stage-bloom { animation: pulse 3s infinite; }
+    .plant-emoji.stage-harvest {
+      animation: glow 0.6s ease-in-out 3;
+      filter: drop-shadow(0 0 16px rgba(212,160,23,0.8));
+    }
+    .stage-name { font-size: 22px; font-weight: 700; color: var(--green); margin: 12px 0 4px; }
+    .stage-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+    .progress-wrap { margin-bottom: 8px; }
+    .progress-bar { height: 10px; background: #e8edf2; border-radius: 5px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; border-radius: 5px;
+      background: linear-gradient(90deg, #a8d5a2, #5ba85a);
+      transition: width 0.6s ease-out;
+    }
+    .progress-text {
+      font-size: 11px; color: var(--text-secondary);
+      display: flex; justify-content: space-between; margin-top: 4px;
+    }
+    .score-row { display: flex; gap: 12px; margin-top: 16px; }
+    .score-item {
+      flex: 1; background: #f8faf9; border-radius: 10px; padding: 12px 8px; text-align: center;
+    }
+    .score-item .val { font-size: 20px; font-weight: 700; color: var(--green); }
+    .score-item .lbl { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .score-item.neg .val { color: #e05555; }
+
+    /* --- 果实陈列室 --- */
+    .fruit-card {
+      background: var(--card-bg); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px;
+    }
+    .fruit-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+    .fruit-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+    .fruit-item {
+      background: #fdf8ed; border: 1px solid #f0e0b0; border-radius: 10px;
+      padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+      flex: 1; min-width: 200px;
+    }
+    .fruit-item .f-emoji { font-size: 28px; }
+    .fruit-item .f-info { flex: 1; }
+    .fruit-item .f-name { font-size: 13px; font-weight: 600; }
+    .fruit-item .f-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .fruit-item .f-date { font-size: 10px; color: #b0a080; margin-top: 2px; }
+    .fruit-empty { font-size: 13px; color: var(--text-secondary); padding: 16px 0; text-align: center; }
+
+    /* --- 日记 --- */
+    .diary-card {
+      background: var(--card-bg); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px;
+    }
+    .diary-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    .diary-list { list-style: none; }
+    .diary-list li {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #f0f4f8;
+      font-size: 13px;
+    }
+    .diary-list li:last-child { border-bottom: none; }
+    .diary-list .d-time { font-size: 11px; color: var(--text-secondary); flex-shrink: 0; width: 48px; }
+    .diary-list .d-change { font-weight: 700; flex-shrink: 0; width: 36px; text-align: center; }
+    .diary-list .d-change.pos { color: var(--green); }
+    .diary-list .d-change.neg { color: #e05555; }
+    .diary-list .d-reason { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* --- 成就 --- */
+    .badge-card {
+      background: var(--card-bg); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px;
+    }
+    .badge-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+    .badge-grid { display: flex; flex-direction: column; gap: 10px; }
+    .badge {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 10px; background: #f8faf9;
+    }
+    .badge.unlocked { background: #f0f7ee; border: 1px solid #c8e6c9; }
+    .badge.locked { opacity: 0.5; }
+    .badge .icon { font-size: 28px; flex-shrink: 0; }
+    .badge .info { flex: 1; }
+    .badge .name { font-size: 14px; font-weight: 600; }
+    .badge .desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .badge .status { font-size: 18px; flex-shrink: 0; }
+
+    /* --- harvest flash --- */
+    .harvest-flash {
+      position: fixed; inset: 0; z-index: 200; pointer-events: none;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 100px;
+      animation: flashBoom 1.8s ease-out forwards;
+    }
+    @keyframes flashBoom {
+      0% { opacity: 1; transform: scale(0.5); }
+      30% { opacity: 1; transform: scale(1.3); }
+      100% { opacity: 0; transform: scale(2); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>我的盆栽</h1>
+      <button class="rules-btn" id="rulesBtn" title="规则说明">?</button>
+    </header>
+
+    <!-- 植物 -->
+    <div class="plant-card">
+      <span class="plant-emoji" id="plantEmoji">🌰</span>
+      <div class="stage-name" id="stageName">种子</div>
+      <div class="stage-desc" id="stageDesc">专注之旅刚刚开始</div>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-text">
+          <span id="progressLabel">0 / 10</span>
+          <span>下一阶段：<span id="nextStage">发芽</span></span>
+        </div>
+      </div>
+      <div class="score-row">
+        <div class="score-item"><div class="val" id="totalPoints">0</div><div class="lbl">总分</div></div>
+        <div class="score-item" id="todayChangeItem">
+          <div class="val" id="todayChange">0</div><div class="lbl">今日变化</div></div>
+        <div class="score-item"><div class="val" id="stageIndex">1/6</div><div class="lbl">阶段</div></div>
+      </div>
+    </div>
+
+    <!-- 果实陈列室 -->
+    <div class="fruit-card">
+      <h2>🏆 果实收藏</h2>
+      <div class="fruit-grid" id="fruitGrid"></div>
+    </div>
+
+    <!-- 植物日记 -->
+    <div class="diary-card">
+      <h2>📜 植物日记</h2>
+      <ul class="diary-list" id="diaryList"></ul>
+    </div>
+
+    <!-- 成就 -->
+    <div class="badge-card">
+      <h2>🏆 成就徽章</h2>
+      <div class="badge-grid" id="badgeGrid"></div>
+    </div>
+  </div>
+
+  <!-- 规则弹窗 -->
+  <div class="modal-overlay" id="rulesModal">
+    <div class="modal-card">
+      <h2>🌱 成长规则</h2>
+      <div class="rule">
+        ✅ 按时完成访问 <b>+4</b><br>
+        ⏰ 超时后延长完成 <b>+2</b><br>
+        🚫 低质量目的 <b>-3</b><br>
+        ☀️ 一天不碰黑名单，每专注30分钟 <b>+2</b>（日上限12）<br>
+        📈 每日总变化上限 <b>±20</b><br>
+        🌳 成长值达到 <b>150</b> 收获随机果实并重新开始
+      </div>
+      <button class="close-btn" id="closeRulesBtn">知道了</button>
+    </div>
+  </div>
+
+  <!-- 收获闪光 -->
+  <div class="harvest-flash" id="harvestFlash" style="display:none;"></div>
+
+  <script src="garden.js"></script>
+</body>
+</html>

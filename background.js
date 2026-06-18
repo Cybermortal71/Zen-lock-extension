@@ -120,6 +120,9 @@ async function flushCurrentSegment(endTime) {
   logs[today] = dayLogs;
 
   await chrome.storage.local.set({ sessions: all, timeLog: logs });
+
+  // 清净日奖励：非黑名单浏览累计
+  awardQuietDayBonus(currentDomain, seconds);
 }
 
 // ============================================================
@@ -454,6 +457,291 @@ async function handleTimeExpire(domain) {
     await chrome.tabs.update(tab.id, { url: timeupUrl });
     console.log('🔒 [到期] 已重定向标签页:', tab.id, domain);
   }
+
+  // --- 生长值结算 ---
+  await settleGrowth(domain);
+}
+
+// ============================================================
+//  盆栽生长值 & 成就系统（大改版）
+// ============================================================
+
+const PLANT_STAGES = [
+  { name: '种子', min: 0, emoji: '🌰' },
+  { name: '发芽', min: 10, emoji: '🌱' },
+  { name: '小苗', min: 30, emoji: '🪴' },
+  { name: '花苞', min: 60, emoji: '🌿' },
+  { name: '开花', min: 100, emoji: '🌸' },
+  { name: '结果', min: 150, emoji: '🎁' }
+];
+
+const FRUIT_POOL = [
+  { name: '专注番茄', emoji: '🍅', description: '你像番茄钟一样可靠。' },
+  { name: '耐心多肉', emoji: '🪴', description: '慢慢来，比较快。' },
+  { name: '死线射手', emoji: '🎯', description: '在截止时间前优雅离场。' },
+  { name: '摸鱼克星', emoji: '🦈', description: '战胜摸鱼欲望的一天！' },
+  { name: '时间琥珀', emoji: '💎', description: '把易逝的时间凝结成光。' },
+  { name: '自律荔枝', emoji: '🍒', description: '自律的果实总是甜美的。' },
+  { name: '早睡仙人掌', emoji: '🌵', description: '不熬夜的勋章。' },
+  { name: '反拖延松果', emoji: '🥜', description: '今天没拖延。' }
+];
+
+// 当次会话结果
+let sessionOutcome = {};
+
+/** 写入生长事件日志（最多 5 条） */
+async function logGrowthEvent(change, reason) {
+  const { growthEvents } = await chrome.storage.local.get('growthEvents');
+  const events = growthEvents || [];
+  events.unshift({ time: new Date().toISOString(), change, reason });
+  if (events.length > 5) events.length = 5;
+  await chrome.storage.local.set({ growthEvents: events });
+}
+
+/** 应用生长值（含上限、收获） */
+async function applyGrowth(points, reason) {
+  const { growthPoints, _dailyGrowth } = await chrome.storage.local.get(['growthPoints', '_dailyGrowth']);
+  const today = dateKey();
+  const dg = (_dailyGrowth && _dailyGrowth.date === today) ? _dailyGrowth : { date: today, change: 0 };
+
+  const newChange = dg.change + points;
+  const cappedChange = Math.max(-20, Math.min(20, newChange));
+  const actualPoints = cappedChange - dg.change;
+  if (actualPoints === 0) return 0;
+
+  dg.change = cappedChange;
+  let gp = (growthPoints || 0) + actualPoints;
+  if (gp < 0) gp = 0;
+
+  await chrome.storage.local.set({ growthPoints: gp, _dailyGrowth: dg });
+  await logGrowthEvent(actualPoints, reason);
+  console.log('🌱 生长值:', gp, '(今日变化:', cappedChange, ')');
+
+  // 达到 150 → 收获果实
+  if (gp >= 150) {
+    await harvestFruit();
+  }
+
+  return actualPoints;
+}
+
+/** 收获果实：随机选一个，重置生长值，发通知 */
+async function harvestFruit() {
+  const fruit = FRUIT_POOL[Math.floor(Math.random() * FRUIT_POOL.length)];
+  const entry = { ...fruit, time: new Date().toISOString() };
+
+  const { harvestedFruits } = await chrome.storage.local.get('harvestedFruits');
+  const fruits = harvestedFruits || [];
+  fruits.push(entry);
+  await chrome.storage.local.set({ harvestedFruits: fruits, growthPoints: 0 });
+
+  // 终极自律：首次收获
+  if (fruits.length === 0) {
+    const { achievements } = await chrome.storage.local.get('achievements');
+    const unlocked = achievements || [];
+    if (!unlocked.includes('ultimateDiscipline')) {
+      unlocked.push('ultimateDiscipline');
+      await chrome.storage.local.set({ achievements: unlocked });
+      const a = ACHIEVEMENTS.ultimateDiscipline;
+      chrome.notifications.create('achieve_ultimateDiscipline', {
+        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
+      });
+      console.log('🏆 成就解锁:', a.name);
+    }
+  }
+
+  // 果实收藏家：3 种不同果实
+  const uniqueNames = new Set(fruits.map(f => f.name));
+  if (uniqueNames.size >= 3) {
+    const { achievements } = await chrome.storage.local.get('achievements');
+    const unlocked = achievements || [];
+    if (!unlocked.includes('fruitCollector')) {
+      unlocked.push('fruitCollector');
+      await chrome.storage.local.set({ achievements: unlocked });
+      const a = ACHIEVEMENTS.fruitCollector;
+      chrome.notifications.create('achieve_fruitCollector', {
+        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
+      });
+      console.log('🏆 成就解锁:', a.name);
+    }
+  }
+
+  console.log('🎉 收获果实:', fruit.name);
+  chrome.notifications.create('harvest_' + Date.now(), {
+    type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+    title: '🎉 你的植物结出了【' + fruit.name + '】！',
+    message: fruit.emoji + ' ' + fruit.description
+  });
+  await logGrowthEvent(0, '🌳 植物结出了【' + fruit.name + '】，新的一轮开始啦！');
+}
+
+/** 结算黑名单访问 */
+async function settleGrowth(domain) {
+  const root = getRootDomain(domain);
+  const outcome = sessionOutcome[root];
+  if (!outcome) return;
+
+  let points = 0, reason = '';
+  if (outcome.lowQuality) {
+    points = -3; reason = '低质量访问 ' + root;
+  } else if (outcome.extended) {
+    points = 2; reason = '超时后延长完成 ' + root;
+  } else {
+    points = 4; reason = '按时完成 ' + root;
+  }
+
+  console.log('🌱 结算:', reason, '→', points, '分');
+  const actual = await applyGrowth(points, reason);
+  delete sessionOutcome[root];
+
+  if (actual > 0 && actual === points) {
+    await checkAchievements(true);
+  } else if (actual > 0) {
+    await checkAchievements(true);
+  }
+}
+
+/** 清净日奖励：非黑名单浏览每 30 分钟 +2，日上限 12 */
+async function awardQuietDayBonus(domain, seconds) {
+  // 检查域名是否在黑名单
+  const { blacklist } = await chrome.storage.sync.get('blacklist');
+  const list = blacklist || [];
+  const nd = normalizeDomain(domain);
+  const isBlocked = list.some(entry => {
+    const ne = normalizeDomain(entry);
+    if (!ne) return false;
+    if (nd === ne || nd.endsWith('.' + ne)) return true;
+    return false;
+  });
+  if (isBlocked) return; // 黑名单网站不参与清净日
+
+  const today = dateKey();
+  const { _quietDay } = await chrome.storage.local.get('_quietDay');
+  const qd = (_quietDay && _quietDay.date === today) ? _quietDay : { date: today, seconds: 0, awarded: 0 };
+
+  qd.seconds += seconds;
+  // 累加非黑名单分钟数（用于时间富翁成就）
+  const { _productiveTotalMinutes } = await chrome.storage.local.get('_productiveTotalMinutes');
+  await chrome.storage.local.set({ _productiveTotalMinutes: (_productiveTotalMinutes || 0) + Math.floor(seconds / 60) });
+
+  // 每 30 分钟（1800 秒）触发一次 +2，日上限 12（6 次）
+  while (qd.seconds >= 1800 && qd.awarded < 6) {
+    qd.seconds -= 1800;
+    qd.awarded++;
+    const actual = await applyGrowth(2, '清净日奖励（非黑名单专注30分钟）');
+    if (actual <= 0) break; // 已达日上限
+  }
+
+  await chrome.storage.local.set({ _quietDay: qd });
+}
+
+// --- 成就定义 ---
+const ACHIEVEMENTS = {
+  firstFocus:          { id:'firstFocus',          name:'初次专注',   desc:'第一次解锁网站', icon:'🔓' },
+  weekStreak:          { id:'weekStreak',          name:'七日君子',   desc:'连续7天每天至少1次无超时访问', icon:'📅' },
+  timeMaster:          { id:'timeMaster',          name:'时间大师',   desc:'累积50次无超时访问', icon:'⏱️' },
+  quietWeek:           { id:'quietWeek',           name:'清净七日',   desc:'连续7天没有任何黑名单网站访问记录', icon:'☀️' },
+  fruitCollector:      { id:'fruitCollector',      name:'果实收藏家', desc:'累计收获3颗不同的果实', icon:'🧺' },
+  timeMillionaire:     { id:'timeMillionaire',     name:'时间富翁',   desc:'非黑名单网站累计浏览超过100小时', icon:'⏳' },
+  gentleGuardian:      { id:'gentleGuardian',      name:'温柔守护者', desc:'累计30次在提醒弹出后按时关闭页面', icon:'🕊️' },
+  ultimateDiscipline:  { id:'ultimateDiscipline',  name:'终极自律',   desc:'成长值达到150并收获第一颗果实', icon:'🏆' }
+};
+
+async function unlockAchievement(id, unlocked, newlyUnlocked) {
+  if (!unlocked.includes(id)) {
+    newlyUnlocked.push(id); unlocked.push(id);
+  }
+}
+
+async function checkAchievements(wasPositive) {
+  const { achievements } = await chrome.storage.local.get('achievements');
+  const unlocked = achievements || [];
+  const newlyUnlocked = [];
+
+  // 初次专注
+  unlockAchievement('firstFocus', unlocked, newlyUnlocked);
+
+  // 时间大师：累积无超时完成次数
+  if (!unlocked.includes('timeMaster')) {
+    const { _completedCount } = await chrome.storage.local.get('_completedCount');
+    const count = (_completedCount || 0) + (wasPositive ? 1 : 0);
+    await chrome.storage.local.set({ _completedCount: count });
+    if (count >= 50) unlockAchievement('timeMaster', unlocked, newlyUnlocked);
+  }
+
+  // 七日君子：连续7天有正增长
+  if (!unlocked.includes('weekStreak')) {
+    const { _streakDays } = await chrome.storage.local.get('_streakDays');
+    const today = dateKey(); const streak = _streakDays || {};
+    if (wasPositive) {
+      streak[today] = true;
+      const days = []; for (let i=0;i<7;i++) { const d=new Date(); d.setDate(d.getDate()-i); days.push(dateKey(d.getTime())); }
+      if (days.every(d=>streak[d])) unlockAchievement('weekStreak', unlocked, newlyUnlocked);
+    }
+    await chrome.storage.local.set({ _streakDays: streak });
+  }
+
+  // 时间富翁：非黑名单累计分钟 ≥ 6000（100小时）
+  if (!unlocked.includes('timeMillionaire')) {
+    const { _productiveTotalMinutes } = await chrome.storage.local.get('_productiveTotalMinutes');
+    if ((_productiveTotalMinutes || 0) >= 6000) unlockAchievement('timeMillionaire', unlocked, newlyUnlocked);
+  }
+
+  if (newlyUnlocked.length > 0) {
+    await chrome.storage.local.set({ achievements: unlocked });
+    for (const id of newlyUnlocked) {
+      const a = ACHIEVEMENTS[id];
+      console.log('🏆 成就解锁:', a.name);
+      chrome.notifications.create('achieve_' + id, {
+        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
+      });
+    }
+  }
+}
+
+// --- 页面消息处理 ---
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    if (message.action === 'sessionStart') {
+      const root = getRootDomain(message.domain);
+      sessionOutcome[root] = { extended: false, lowQuality: message.lowQuality || false };
+      sendResponse({ ok: true });
+    }
+    else if (message.action === 'sessionExtend') {
+      const root = getRootDomain(message.domain);
+      if (sessionOutcome[root]) { sessionOutcome[root].extended = true; }
+      sendResponse({ ok: true });
+    }
+    else if (message.action === 'sessionClose') {
+      const root = getRootDomain(message.domain);
+      if (sessionOutcome[root]) { delete sessionOutcome[root]; }
+      // 温柔守护者计数
+      const { _gentleCloseCount } = await chrome.storage.local.get('_gentleCloseCount');
+      const gCount = (_gentleCloseCount || 0) + 1;
+      await chrome.storage.local.set({ _gentleCloseCount: gCount });
+      if (gCount >= 30) await checkGentleGuardian();
+      sendResponse({ ok: true });
+    }
+  })();
+  return true;
+});
+
+async function checkGentleGuardian() {
+  const { achievements } = await chrome.storage.local.get('achievements');
+  const unlocked = achievements || [];
+  if (!unlocked.includes('gentleGuardian')) {
+    unlocked.push('gentleGuardian');
+    await chrome.storage.local.set({ achievements: unlocked });
+    const a = ACHIEVEMENTS.gentleGuardian;
+    chrome.notifications.create('achieve_gentleGuardian', {
+      type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
+    });
+    console.log('🏆 成就解锁:', a.name);
+  }
 }
 
 // ============================================================
@@ -512,6 +800,44 @@ async function dailyCleanup() {
     }
     if (passesChanged) {
       await chrome.storage.local.set({ passes });
+    }
+  }
+
+  // ---- 清净七日：检查昨天是否有黑名单访问 ----
+  const yesterday = dateKey(Date.now() - 86400000);
+  const { blacklist } = await chrome.storage.sync.get('blacklist');
+  const blist = blacklist || [];
+  const yesterdaySessions = sessions ? (sessions[yesterday] || []) : [];
+  const hadBlacklistYesterday = yesterdaySessions.some(s => {
+    const nd = normalizeDomain(s.domain);
+    return blist.some(e => {
+      const ne = normalizeDomain(e);
+      if (!ne) return false;
+      return nd === ne || nd.endsWith('.' + ne);
+    });
+  });
+
+  const { _noBlacklistStreak } = await chrome.storage.local.get('_noBlacklistStreak');
+  let streak = _noBlacklistStreak || 0;
+  if (hadBlacklistYesterday) {
+    streak = 0;
+  } else {
+    streak++;
+  }
+  await chrome.storage.local.set({ _noBlacklistStreak: streak });
+
+  if (streak >= 7) {
+    const { achievements } = await chrome.storage.local.get('achievements');
+    const unlocked = achievements || [];
+    if (!unlocked.includes('quietWeek')) {
+      unlocked.push('quietWeek');
+      await chrome.storage.local.set({ achievements: unlocked });
+      const a = ACHIEVEMENTS.quietWeek;
+      chrome.notifications.create('achieve_quietWeek', {
+        type: 'basic', iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: '🏆 成就解锁！', message: a.icon + ' ' + a.name + ' — ' + a.desc
+      });
+      console.log('🏆 成就解锁:', a.name);
     }
   }
 
@@ -583,12 +909,26 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     zhipuKey: sync.zhipuKey || ''
   });
 
-  const local = await chrome.storage.local.get(['timeLog', 'sessions', 'growthPoints', 'achievements']);
+  const local = await chrome.storage.local.get([
+    'timeLog', 'sessions', 'growthPoints', 'achievements',
+    '_dailyGrowth', '_completedCount', '_streakDays',
+    '_quietDay', 'harvestedFruits', 'growthEvents',
+    '_productiveTotalMinutes', '_gentleCloseCount', '_noBlacklistStreak'
+  ]);
   await chrome.storage.local.set({
     timeLog: local.timeLog || {},
     sessions: local.sessions || {},
     growthPoints: local.growthPoints ?? 0,
-    achievements: local.achievements || []
+    achievements: local.achievements || [],
+    _dailyGrowth: local._dailyGrowth || { date: '', change: 0 },
+    _completedCount: local._completedCount ?? 0,
+    _streakDays: local._streakDays || {},
+    _quietDay: local._quietDay || { date: '', seconds: 0, awarded: 0 },
+    harvestedFruits: local.harvestedFruits || [],
+    growthEvents: local.growthEvents || [],
+    _productiveTotalMinutes: local._productiveTotalMinutes ?? 0,
+    _gentleCloseCount: local._gentleCloseCount ?? 0,
+    _noBlacklistStreak: local._noBlacklistStreak ?? 0
   });
 
   console.log('✅ ZenLock 初始化完成 (install/update)');
