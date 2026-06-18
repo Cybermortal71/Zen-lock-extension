@@ -14,9 +14,13 @@ let isIdle = false;          // 是否处于 idle / locked
 //  工具函数
 // ============================================================
 
-/** 返回 yyyy-mm-dd 格式的日期字符串 */
+/** 返回 yyyy-mm-dd 格式的日期字符串（本地时间） */
 function dateKey(ts = Date.now()) {
-  return new Date(ts).toISOString().slice(0, 10);
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** 从完整 URL 提取 hostname；失败返回 null */

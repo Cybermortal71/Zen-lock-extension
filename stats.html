@@ -225,10 +225,18 @@
         <div class="label">访问次数</div>
         <div class="value" id="sessionCount">--</div>
       </div>
+      <div class="summary-card">
+        <div class="label">访问黑名单次数</div>
+        <div class="value" id="blacklistHits">--</div>
+      </div>
     </div>
 
     <!-- 图表 -->
     <div class="chart-card" id="chartCard" style="position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:12px;color:var(--text-secondary);">拖动选取时间范围可放大</span>
+        <button class="btn-sm" id="resetZoomBtn" style="display:none;">↺ 重置缩放</button>
+      </div>
       <canvas id="chartCanvas"></canvas>
       <div class="chart-tooltip" id="chartTooltip"></div>
     </div>

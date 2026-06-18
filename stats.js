@@ -26,8 +26,44 @@
     const totalTimeEl = document.getElementById('totalTime');
     const domainCountEl = document.getElementById('domainCount');
     const sessionCountEl = document.getElementById('sessionCount');
+    const blacklistHitsEl = document.getElementById('blacklistHits');
+    const resetZoomBtn = document.getElementById('resetZoomBtn');
 
-    let currentDate = new Date().toISOString().slice(0, 10);
+    // 本地时间日期键（与 background.js 的 dateKey() 保持一致）
+    function localDateKey(ts) {
+      const d = new Date(ts);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    let currentDate = localDateKey(Date.now());
+
+    // --- 缩放状态 ---
+    let zoomRange = null;       // { start, end } 或 null（全屏 0–24）
+    let brushStart = null;      // { x, hour } 拖拽起点
+    let brushEnd = null;        // { x, hour } 拖拽终点
+    let isBrushing = false;
+
+    // --- 域名标准化（与 background.js 一致） ---
+    function normalizeDomain(domain) {
+      if (!domain) return domain;
+      return domain.startsWith('www.') ? domain.slice(4) : domain;
+    }
+
+    function isBlacklisted(domain, blacklist) {
+      if (!domain || !blacklist || !blacklist.length) return false;
+      const nd = normalizeDomain(domain);
+      if (!nd) return false;
+      return blacklist.some(entry => {
+        const ne = normalizeDomain(entry);
+        if (!ne) return false;
+        if (nd === ne) return true;
+        if (nd.endsWith('.' + ne)) return true;
+        return false;
+      });
+    }
 
     // --- 域名颜色表 ---
     const COLOR_PALETTE = [
@@ -71,27 +107,34 @@
       return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     }
 
-    function setDateStr(d) {
+    function setDateStr(d, skipPicker) {
+      console.log('[Zenlock Stats] setDateStr d=' + d + ' skipPicker=' + skipPicker + ' currentDate=' + currentDate);
+      if (d === currentDate) {
+        console.log('[Zenlock Stats] 日期未变，跳过');
+        return;
+      }
       currentDate = d;
-      datePicker.value = d;
+      if (!skipPicker) datePicker.value = d;
       dateLabel.textContent = d;
       loadAndRender(d);
     }
 
     // --- 事件绑定 ---
-    datePicker.addEventListener('change', () => setDateStr(datePicker.value));
+    datePicker.addEventListener('change', () => setDateStr(datePicker.value, true));
     prevDayBtn.addEventListener('click', () => {
-      const d = new Date(currentDate);
+      const parts = currentDate.split('-').map(Number);
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
       d.setDate(d.getDate() - 1);
-      setDateStr(d.toISOString().slice(0, 10));
+      setDateStr(localDateKey(d.getTime()));
     });
     nextDayBtn.addEventListener('click', () => {
-      const d = new Date(currentDate);
+      const parts = currentDate.split('-').map(Number);
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
       d.setDate(d.getDate() + 1);
-      setDateStr(d.toISOString().slice(0, 10));
+      setDateStr(localDateKey(d.getTime()));
     });
     todayBtn.addEventListener('click', () => {
-      setDateStr(new Date().toISOString().slice(0, 10));
+      setDateStr(localDateKey(Date.now()));
     });
     document.getElementById('optionsLink').addEventListener('click', (e) => {
       e.preventDefault();
@@ -101,7 +144,11 @@
     // --- Canvas 瀑布图绘制 ---
     let hoverSessions = []; // 当前鼠标悬浮可检测的矩形区域
 
-    function drawWaterfall(canvas, sessions, domainOrder) {
+    // 缓存当前数据，供刷选重绘使用
+    let daySessionsCache = [];
+    let domainOrderCache = [];
+
+    function drawWaterfall(canvas, sessions, domainOrder, zoom) {
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
 
@@ -123,37 +170,57 @@
       const totalRowsH = domainCount * rowH;
       const startY = margin.top + (plotH - totalRowsH) / 2;
 
-      // 清空
+      // 缩放参数
+      const zMin = zoom ? zoom.start : 0;
+      const zMax = zoom ? zoom.end : 24;
+      const zSpan = zMax - zMin;
+
+      function hourToX(h) {
+        return margin.left + ((h - zMin) / zSpan) * plotW;
+      }
+      function xToHour(px) {
+        return zMin + ((px - margin.left) / plotW) * zSpan;
+      }
+
       ctx.clearRect(0, 0, W, H);
 
       // 背景
       ctx.fillStyle = '#fafcfe';
       ctx.fillRect(margin.left, margin.top, plotW, plotH);
 
-      // 网格线 + X轴标签
+      // 动态网格
+      const gridStep = zSpan <= 1 ? 0.25 : zSpan <= 4 ? 0.5 : zSpan <= 12 ? 1 : 2;
+      const labelStep = zSpan <= 1 ? 0.25 : zSpan <= 4 ? 1 : zSpan <= 12 ? 2 : 3;
+
       ctx.strokeStyle = '#e8edf2';
       ctx.lineWidth = 1;
       ctx.fillStyle = '#7f8c9b';
       ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'center';
-      for (let h = 0; h <= 24; h += 1) {
-        const x = margin.left + (h / 24) * plotW;
+
+      for (let h = Math.floor(zMin / gridStep) * gridStep; h <= zMax; h += gridStep) {
+        if (h < zMin - 0.001) continue;
+        const x = hourToX(h);
         ctx.beginPath();
         ctx.moveTo(x, margin.top);
         ctx.lineTo(x, margin.top + plotH);
         ctx.stroke();
-        if (h % 3 === 0) {
-          ctx.fillText(String(h).padStart(2, '0') + ':00', x, H - 8);
+
+        // 标签只画在大刻度上
+        const isLabel = Math.abs(h - Math.round(h / labelStep) * labelStep) < 0.001;
+        if (isLabel) {
+          const hh = Math.floor(h);
+          const mm = Math.round((h - hh) * 60);
+          ctx.fillText(
+            String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0'),
+            x, H - 8
+          );
         }
       }
 
-      // X轴标签
-      ctx.fillStyle = '#7f8c9b';
-      ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'center';
       ctx.fillText('时间', margin.left + plotW / 2, H - 2);
 
-      // Y轴域名
+      // Y轴
       ctx.textAlign = 'right';
       ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.fillStyle = '#2c3e50';
@@ -161,25 +228,27 @@
       domainOrder.forEach((dom, i) => {
         const y = startY + i * rowH + rowH / 2 + 4;
         let text = dom;
-        // 截断过长域名
-        while (ctx.measureText(text).width > maxDomainW && text.length > 4) {
-          text = text.slice(0, -1);
-        }
+        while (ctx.measureText(text).width > maxDomainW && text.length > 4) text = text.slice(0, -1);
         if (text !== dom) text += '…';
         ctx.fillText(text, margin.left - 8, y);
       });
 
-      // 绘制 session 色条
+      // 绘制色条
       hoverSessions = [];
       sessions.forEach(s => {
         const catIdx = domainOrder.indexOf(s.domain);
         if (catIdx < 0) return;
-        const startH = tsToHours(s.start);
-        const endH = Math.min(tsToHours(s.end), 24);
+        let startH = tsToHours(s.start);
+        let endH = Math.min(tsToHours(s.end), 24);
         if (endH <= startH) return;
 
-        const x1 = margin.left + (startH / 24) * plotW;
-        const x2 = margin.left + (endH / 24) * plotW;
+        // 裁剪到可视范围
+        const visibleStart = Math.max(startH, zMin);
+        const visibleEnd = Math.min(endH, zMax);
+        if (visibleEnd <= visibleStart) return;
+
+        const x1 = hourToX(visibleStart);
+        const x2 = hourToX(visibleEnd);
         const y = startY + catIdx * rowH + rowH * 0.15;
         const barH = rowH * 0.7;
         const w = Math.max(4, x2 - x1);
@@ -188,7 +257,6 @@
         ctx.strokeStyle = 'rgba(255,255,255,0.7)';
         ctx.lineWidth = 1;
 
-        // 圆角矩形
         const r = Math.min(3, barH / 3);
         ctx.beginPath();
         ctx.moveTo(x1 + r, y);
@@ -205,19 +273,88 @@
         ctx.stroke();
 
         hoverSessions.push({
-          x: x1, y: y, w: w, h: barH,
+          x: x1, y, w, h: barH,
           domain: s.domain,
           startH, endH,
           duration: Math.max(0, Math.floor((s.end - s.start) / 1000))
         });
       });
+
+      // 刷选半透明遮罩
+      if (isBrushing && brushStart && brushEnd) {
+        const bx = Math.min(brushStart.x, brushEnd.x);
+        const bw = Math.abs(brushEnd.x - brushStart.x);
+        ctx.fillStyle = 'rgba(74,144,217,0.18)';
+        ctx.fillRect(bx, margin.top, bw, plotH);
+        ctx.strokeStyle = 'rgba(74,144,217,0.5)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, margin.top, bw, plotH);
+      }
     }
 
-    // --- 鼠标悬浮 tooltip ---
+    // --- 鼠标事件：刷选缩放 + tooltip ---
+    let redrawPending = null;
+    function scheduleRedraw() {
+      if (redrawPending) return;
+      redrawPending = requestAnimationFrame(() => {
+        redrawPending = null;
+        const valid = daySessionsCache.filter(s =>
+          typeof s.start === 'number' && s.start > 0 &&
+          typeof s.end === 'number' && s.end > 0 &&
+          s.end >= s.start &&
+          Math.floor((s.end - s.start) / 1000) <= 86400
+        );
+        const order = domainOrderCache.length ? domainOrderCache : [...new Set(valid.map(s => s.domain))];
+        drawWaterfall(chartCanvas, valid, order, zoomRange);
+      });
+    }
+
+    chartCanvas.addEventListener('mousedown', (e) => {
+      const rect = chartCanvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      // 只响应左键
+      if (e.button !== 0) return;
+
+      // 检查是否在绘图区域内
+      const W = rect.width;
+      const margin = { left: 138, right: 16, top: 12 };
+      const H = 500;
+      const plotW = W - margin.left - margin.right;
+      const plotH = H - margin.top - 38;
+
+      if (mx >= margin.left && mx <= margin.left + plotW &&
+          my >= margin.top && my <= margin.top + plotH) {
+        const zMin = zoomRange ? zoomRange.start : 0;
+        const zMax = zoomRange ? zoomRange.end : 24;
+        const zSpan = zMax - zMin;
+        const hour = zMin + ((mx - margin.left) / plotW) * zSpan;
+        brushStart = { x: mx, hour };
+        brushEnd = { x: mx, hour };
+        isBrushing = true;
+        chartTooltip.style.display = 'none';
+        e.preventDefault();
+      }
+    });
+
     chartCanvas.addEventListener('mousemove', (e) => {
       const rect = chartCanvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
+
+      if (isBrushing) {
+        const zMin = zoomRange ? zoomRange.start : 0;
+        const zMax = zoomRange ? zoomRange.end : 24;
+        const zSpan = zMax - zMin;
+        const W = rect.width;
+        const margin = { left: 138, right: 16 };
+        const plotW = W - margin.left - margin.right;
+        const hour = zMin + ((mx - margin.left) / plotW) * zSpan;
+        brushEnd = { x: mx, hour };
+        scheduleRedraw();
+        return;
+      }
 
       const hit = hoverSessions.find(h =>
         mx >= h.x && mx <= h.x + h.w && my >= h.y && my <= h.y + h.h
@@ -232,30 +369,97 @@
         chartCanvas.style.cursor = 'pointer';
       } else {
         chartTooltip.style.display = 'none';
-        chartCanvas.style.cursor = 'default';
+        chartCanvas.style.cursor = isBrushing ? 'col-resize' : 'default';
       }
+    });
+
+    chartCanvas.addEventListener('mouseup', (e) => {
+      if (!isBrushing || !brushStart || !brushEnd) {
+        isBrushing = false;
+        brushStart = brushEnd = null;
+        return;
+      }
+
+      const startH = Math.min(brushStart.hour, brushEnd.hour);
+      const endH = Math.max(brushStart.hour, brushEnd.hour);
+
+      isBrushing = false;
+      brushStart = brushEnd = null;
+
+      // 拖拽距离太小 → 视为点击，重置缩放
+      if (endH - startH < 0.05) {
+        if (zoomRange) {
+          zoomRange = null;
+          resetZoomBtn.style.display = 'none';
+          console.log('[Zenlock Stats] 缩放已重置');
+          scheduleRedraw();
+        }
+        return;
+      }
+
+      zoomRange = { start: startH, end: endH };
+      resetZoomBtn.style.display = 'inline-block';
+      console.log('[Zenlock Stats] 缩放至:', fmtTime(startH), '–', fmtTime(endH));
+      scheduleRedraw();
     });
 
     chartCanvas.addEventListener('mouseleave', () => {
       chartTooltip.style.display = 'none';
+      if (isBrushing) {
+        isBrushing = false;
+        brushStart = brushEnd = null;
+        scheduleRedraw();
+      }
+    });
+
+    // --- 重置缩放按钮 ---
+    resetZoomBtn.addEventListener('click', () => {
+      zoomRange = null;
+      brushStart = brushEnd = null;
+      isBrushing = false;
+      resetZoomBtn.style.display = 'none';
+      const valid = daySessionsCache.filter(s =>
+        typeof s.start === 'number' && s.start > 0 &&
+        typeof s.end === 'number' && s.end > 0 &&
+        s.end >= s.start &&
+        Math.floor((s.end - s.start) / 1000) <= 86400
+      );
+      const order = domainOrderCache.length ? domainOrderCache : [...new Set(valid.map(s => s.domain))];
+      drawWaterfall(chartCanvas, valid, order, null);
+      console.log('[Zenlock Stats] 缩放已重置');
     });
 
     // --- 加载 & 渲染 ---
     async function loadAndRender(dateStr) {
+      // 取消待处理的刷选重绘（上一日期的残留）
+      if (redrawPending) {
+        cancelAnimationFrame(redrawPending);
+        redrawPending = null;
+      }
+
       console.log('[Zenlock Stats] ====== 加载日期:', dateStr, '======');
 
       const storageData = await chrome.storage.local.get(['sessions', 'timeLog']);
-      console.log('[Zenlock Stats] 原始 sessions 对象键:', Object.keys(storageData.sessions || {}));
-      console.log('[Zenlock Stats] 原始 timeLog 对象键:', Object.keys(storageData.timeLog || {}));
 
-      const allSessions = storageData.sessions || {};
-      let daySessions = allSessions[dateStr] || [];
+      // 强力诊断：打印每个日期的 session 数量 + 首条样本
+      const allSessionsRaw = storageData.sessions || {};
+      const dateKeys = Object.keys(allSessionsRaw).sort();
+      console.log('[Zenlock Stats] ========== 全部日期诊断 ==========');
+      dateKeys.forEach(k => {
+        const arr = allSessionsRaw[k] || [];
+        const sample = arr.length > 0 ? `${arr[0].domain} ${new Date(arr[0].start).toLocaleTimeString()}-${new Date(arr[0].end).toLocaleTimeString()}` : '(空)';
+        console.log(`[Zenlock Stats]   日期键=${k}  session数=${arr.length}  首条=${sample}`);
+      });
+      console.log('[Zenlock Stats] ==========================================');
+
+      let daySessions = (allSessionsRaw[dateStr] || []).slice(); // 浅拷贝避免引用问题
 
       // 过滤内部页面
-      const INTERNAL_DOMAINS = /^(newtab|extensions|edge_.*|chrome_.*)$/;
+      const INTERNAL_DOMAINS = /^(newtab|extensions|edge_.*|chrome_.*|local-ntp|ntp\.msn\.com)$/;
       const isExtensionId = /^[a-z]{32}$/;
       daySessions = daySessions.filter(s => {
         const d = s.domain;
+        if (!d) return false;                             // null/undefined 域名
         if (INTERNAL_DOMAINS.test(d)) return false;
         if (isExtensionId.test(d)) return false;
         return true;
@@ -277,6 +481,9 @@
         totalTimeEl.textContent = '--';
         domainCountEl.textContent = '--';
         sessionCountEl.textContent = '--';
+        blacklistHitsEl.textContent = '--';
+        daySessionsCache = [];
+        domainOrderCache = [];
         return;
       }
 
@@ -300,9 +507,29 @@
 
       console.log('[Zenlock Stats] 汇总 totalSec:', totalSec, '→', formatDuration(totalSec), '| 域名:', domainSet.size, '| 跳过:', skipped);
 
+      // --- 黑名单命中统计 ---
+      const { blacklist } = await chrome.storage.sync.get(['blacklist']);
+      const blist = blacklist || [];
+      let blacklistHits = 0;
+      try {
+        daySessions.forEach(s => {
+          if (isBlacklisted(s.domain, blist)) blacklistHits++;
+        });
+      } catch (e) {
+        console.warn('[Zenlock Stats] 黑名单统计出错（已跳过）:', e);
+      }
+      console.log('[Zenlock Stats] 黑名单命中次数:', blacklistHits, '| 黑名单:', blist);
+
       totalTimeEl.textContent = formatDuration(totalSec);
       domainCountEl.textContent = domainSet.size;
       sessionCountEl.textContent = daySessions.length - skipped;
+      blacklistHitsEl.textContent = blacklistHits;
+
+      // --- 日期切换时重置缩放 ---
+      zoomRange = null;
+      brushStart = brushEnd = null;
+      isBrushing = false;
+      resetZoomBtn.style.display = 'none';
 
       // --- 域名排序 ---
       const domainFirstSeen = {};
@@ -318,15 +545,21 @@
       domainOrder.sort((a, b) => (domainFirstSeen[a] || 0) - (domainFirstSeen[b] || 0));
       console.log('[Zenlock Stats] 域名顺序:', domainOrder);
 
-      // --- 绘制 ---
+      // --- 缓存供缩放时重绘 ---
       const validSessions = daySessions.filter(s =>
         typeof s.start === 'number' && s.start > 0 &&
         typeof s.end === 'number' && s.end > 0 &&
         s.end >= s.start &&
         Math.floor((s.end - s.start) / 1000) <= 86400
       );
-      console.log('[Zenlock Stats] 有效 session 用于绘图:', validSessions.length);
-      drawWaterfall(chartCanvas, validSessions, domainOrder);
+      daySessionsCache = validSessions;
+      domainOrderCache = domainOrder;
+
+      console.log('[Zenlock Stats] 有效 session 用于绘图:', validSessions.length, '域名:', domainOrder.join(', '));
+      if (validSessions.length > 0) {
+        console.log('[Zenlock Stats] 绘图数据样本:', JSON.stringify(validSessions.slice(0, 3).map(s => ({ d: s.domain, t: fmtTime(tsToHours(s.start)) + '-' + fmtTime(tsToHours(s.end)) }))));
+      }
+      drawWaterfall(chartCanvas, validSessions, domainOrder, null);
       console.log('[Zenlock Stats] Canvas 绘制完成');
     }
 
@@ -335,31 +568,9 @@
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        const storageData = chrome.storage.local.get(['sessions']);
-        storageData.then(data => {
-          const allSessions = data.sessions || {};
-          let daySessions = (allSessions[currentDate] || [])
-            .filter(s => {
-              const d = s.domain;
-              if (/^(newtab|extensions|edge_.*|chrome_.*)$/.test(d)) return false;
-              if (/^[a-z]{32}$/.test(d)) return false;
-              return true;
-            })
-            .filter(s =>
-              typeof s.start === 'number' && s.start > 0 &&
-              typeof s.end === 'number' && s.end > 0 &&
-              s.end >= s.start &&
-              Math.floor((s.end - s.start) / 1000) <= 86400
-            );
-          const domainFirstSeen = {};
-          daySessions.forEach(s => {
-            if (!(s.domain in domainFirstSeen)) domainFirstSeen[s.domain] = s.start;
-            else domainFirstSeen[s.domain] = Math.min(domainFirstSeen[s.domain], s.start);
-          });
-          const domainOrder = [...new Set(daySessions.map(s => s.domain))];
-          domainOrder.sort((a, b) => (domainFirstSeen[a] || 0) - (domainFirstSeen[b] || 0));
-          drawWaterfall(chartCanvas, daySessions, domainOrder);
-        });
+        if (daySessionsCache.length && domainOrderCache.length) {
+          drawWaterfall(chartCanvas, daySessionsCache, domainOrderCache, zoomRange);
+        }
       }, 200);
     });
 

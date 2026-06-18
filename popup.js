@@ -2,9 +2,13 @@
 // ZenLock - 弹出窗口逻辑
 // ============================================================
 
-/** yyyy-mm-dd */
+/** yyyy-mm-dd（本地时间） */
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** 秒数 → 可读时长 */
