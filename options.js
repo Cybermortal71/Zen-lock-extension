@@ -114,5 +114,11 @@ blacklistUl.addEventListener('click', (e) => {
   removeDomain(index);
 });
 
+// --- 统计页面入口 ---
+document.getElementById('statsLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: chrome.runtime.getURL('stats.html') });
+});
+
 // --- 启动 ---
 loadBlacklist();

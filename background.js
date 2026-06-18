@@ -149,7 +149,12 @@ chrome.tabs.onActivated.addListener(async () => {
   if (isIdle) return;
   try {
     const tab = await getActiveTab();
-    const dom = tab ? hostname(tab.url) : null;
+    // 跳过内部页面（扩展页/新标签等），只追踪真实网站
+    if (!tab || !isWebPage(tab.url)) {
+      if (currentDomain) await switchDomain(null);
+      return;
+    }
+    const dom = hostname(tab.url);
     if (dom !== currentDomain) {
       await switchDomain(dom);
     }
