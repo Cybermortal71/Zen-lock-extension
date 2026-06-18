@@ -222,6 +222,24 @@
       <ul class="blacklist" id="blacklistUl"></ul>
     </div>
 
+    <!-- DeepSeek API Key -->
+    <div class="card">
+      <h2>DeepSeek API Key</h2>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">用于生成浏览周报，Key 仅保存在本地。</p>
+      <div class="input-row">
+        <input
+          type="password"
+          id="deepseekKeyInput"
+          placeholder="sk-..."
+          autocomplete="off"
+        >
+        <button class="btn btn-primary" id="saveKeyBtn">保存</button>
+      </div>
+      <p style="font-size:11px;color:var(--text-secondary);margin-top:8px;">
+        <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--primary);">获取 API Key →</a>
+      </p>
+    </div>
+
     <!-- 快捷入口 -->
     <div class="card" style="text-align:center;">
       <a href="#" id="statsLink" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500;">

@@ -582,6 +582,118 @@
       console.log('[Zenlock Stats] Canvas 绘制完成');
     }
 
+    // ============================================================
+    //  AI 周报
+    // ============================================================
+    const generateReportBtn = document.getElementById('generateReportBtn');
+    const reportResult = document.getElementById('reportResult');
+
+    generateReportBtn.addEventListener('click', async () => {
+      // 读取 API Key
+      const { deepseekKey } = await chrome.storage.sync.get('deepseekKey');
+      if (!deepseekKey) {
+        reportResult.style.display = 'block';
+        reportResult.innerHTML = '<span style="color:#e05555;">⚠️ 请先在<a href="#" id="goOptions">设置页</a>配置 DeepSeek API Key。</span>';
+        document.getElementById('goOptions').addEventListener('click', (e) => {
+          e.preventDefault();
+          chrome.runtime.openOptionsPage();
+        });
+        return;
+      }
+
+      // 收集过去 7 天的 timeLog
+      const { timeLog } = await chrome.storage.local.get('timeLog');
+      const logs = timeLog || {};
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = localDateKey(d.getTime());
+        days.push(key);
+      }
+
+      // 构建纯文本摘要
+      const lines = [];
+      days.forEach(dateKey => {
+        const dayLogs = logs[dateKey];
+        if (!dayLogs || Object.keys(dayLogs).length === 0) return;
+        const d = new Date(dateKey + 'T00:00:00');
+        const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日`;
+        const entries = Object.entries(dayLogs)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([domain, sec]) => {
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            return h > 0 ? `${domain} ${h}小时${m}分钟` : `${domain} ${m}分钟`;
+          });
+        if (entries.length > 0) {
+          lines.push(`${dateLabel}：${entries.join('，')}`);
+        }
+      });
+
+      if (lines.length === 0) {
+        reportResult.style.display = 'block';
+        reportResult.innerHTML = '<span style="color:var(--text-secondary);">暂无最近7天的浏览数据。</span>';
+        return;
+      }
+
+      const summary = lines.join('\n');
+      console.log('[Zenlock Stats] 周报数据摘要:\n', summary);
+
+      // 显示 loading
+      generateReportBtn.disabled = true;
+      generateReportBtn.textContent = '⏳ 生成中...';
+      reportResult.style.display = 'block';
+      reportResult.innerHTML = '<span style="color:var(--text-secondary);">正在请求 DeepSeek API，请稍候…</span>';
+
+      try {
+        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + deepseekKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [
+              {
+                role: 'system',
+                content: '你是一位亲切的时间管理教练。根据用户的浏览数据，用中文给出200字左右的总结，包括时间分配特点、值得注意的习惯，以及两条具体可行的改善建议。'
+              },
+              {
+                role: 'user',
+                content: '以下是我过去7天的网页浏览记录（仅包含域名和时长）：\n' + summary
+              }
+            ],
+            max_tokens: 600,
+            temperature: 0.7
+          })
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('API Key 无效（401），请检查设置。');
+          }
+          throw new Error('API 请求失败（' + response.status + '）');
+        }
+
+        const data = await response.json();
+        const aiText = data.choices?.[0]?.message?.content || '（AI 返回为空）';
+        reportResult.innerHTML =
+          '<div style="font-weight:600;color:var(--primary);margin-bottom:8px;">📋 AI 周报总结</div>' +
+          '<div>' + aiText.replace(/\n/g, '<br>') + '</div>';
+        console.log('[Zenlock Stats] AI 周报生成成功');
+
+      } catch (e) {
+        console.error('[Zenlock Stats] AI 周报失败:', e);
+        reportResult.innerHTML = '<span style="color:#e05555;">❌ ' + e.message + '</span>';
+      } finally {
+        generateReportBtn.disabled = false;
+        generateReportBtn.textContent = '📊 生成周报';
+      }
+    });
+
     // --- 响应式重绘 ---
     let resizeTimer;
     window.addEventListener('resize', () => {

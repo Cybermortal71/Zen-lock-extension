@@ -7,6 +7,8 @@ const addBtn = document.getElementById('addBtn');
 const blacklistUl = document.getElementById('blacklistUl');
 const countSpan = document.getElementById('count');
 const toast = document.getElementById('toast');
+const deepseekKeyInput = document.getElementById('deepseekKeyInput');
+const saveKeyBtn = document.getElementById('saveKeyBtn');
 
 let blacklist = [];
 
@@ -114,6 +116,18 @@ blacklistUl.addEventListener('click', (e) => {
   removeDomain(index);
 });
 
+// --- DeepSeek API Key ---
+async function loadKey() {
+  const { deepseekKey } = await chrome.storage.sync.get('deepseekKey');
+  if (deepseekKey) deepseekKeyInput.value = deepseekKey;
+}
+
+saveKeyBtn.addEventListener('click', async () => {
+  const key = deepseekKeyInput.value.trim();
+  await chrome.storage.sync.set({ deepseekKey: key });
+  showToast(key ? 'API Key 已保存' : 'API Key 已清空');
+});
+
 // --- 统计页面入口 ---
 document.getElementById('statsLink').addEventListener('click', (e) => {
   e.preventDefault();
@@ -122,3 +136,4 @@ document.getElementById('statsLink').addEventListener('click', (e) => {
 
 // --- 启动 ---
 loadBlacklist();
+loadKey();
